@@ -4,13 +4,28 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "astro dev",
+    "start": "astro dev",
     "build": "astro check && astro build",
     "preview": "astro preview",
+    "lint": "eslint --fix \"src/**/*.{js,ts,jsx,tsx,astro}\"",
+    "astro:check": "astro check",
     "astro": "astro"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.4",
-    "astro": "^5.0.0-beta.8",
-    "typescript": "^5.6.3"
+    "@astrojs/sitemap": "^3.2.1",
+    "@sferg989/astro-utils": "^1.0.0",
+    "astro": "^5.0.2",
+    "graphql-request": "^7.1.0",
+    "jsdom": "^25.0.1",
+    "typescript": "^5.5.4"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^21.1.7",
+    "@typescript-eslint/eslint-plugin": "^8.11.0",
+    "@typescript-eslint/parser": "^8.2.0",
+    "eslint": "^8.57.0",
+    "eslint-plugin-astro": "^1.2.3",
+    "eslint-plugin-jsx-a11y": "^6.9.0"
   }
 }
