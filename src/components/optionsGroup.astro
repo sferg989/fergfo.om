@@ -1,0 +1,137 @@
+---
+import type { GroupedOption } from '../utils/optionsUtils';
+import { getStrikeClass } from '../utils/optionsUtils';
+
+interface Props {
+  group: GroupedOption;
+  currentPrice: number;
+}
+
+const { group, currentPrice } = Astro.props;
+---
+
+<div class="expiry-group">
+  <button class="expiry-header">
+    <span class="expiry-date">{group.expiryDate}</span>
+    <span class="days-to-expiry">{group.daysToExpiry} days</span>
+    <span class="contract-count">{group.options.length} contracts</span>
+  </button>
+  <div class="options-details hidden">
+    <table class="options-table">
+      <thead>
+        <tr>
+          <th>Strike</th>
+          <th>Last</th>
+          <th>Bid</th>
+          <th>Ask</th>
+          <th>Volume</th>
+          <th>Open Int.</th>
+          <th>IV%</th>
+          <th>Delta</th>
+          <th>Gamma</th>
+          <th>Theta</th>
+        </tr>
+      </thead>
+      <tbody>
+        {group.options.map((option) => (
+          <tr>
+            <td class={getStrikeClass(option.strike, currentPrice)}>
+              ${option.strike.toFixed(2)}
+            </td>
+            <td>${option.lastPrice.toFixed(2)}</td>
+            <td>${option.bid.toFixed(2)}</td>
+            <td>${option.ask.toFixed(2)}</td>
+            <td>{option.volume}</td>
+            <td>{option.openInterest}</td>
+            <td>{(option.impliedVolatility * 100).toFixed(1)}%</td>
+            <td>{option.delta?.toFixed(3) || 'N/A'}</td>
+            <td>{option.gamma?.toFixed(4) || 'N/A'}</td>
+            <td>{option.theta?.toFixed(4) || 'N/A'}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<style>
+  .expiry-group {
+    border: 1px solid #e2e8f0;
+    border-radius: 0.375rem;
+    overflow: hidden;
+  }
+
+  .expiry-header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: #f8fafc;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .expiry-header:hover {
+    background: #f1f5f9;
+  }
+
+  .days-to-expiry, .contract-count {
+    color: #6b7280;
+    font-size: 0.875rem;
+  }
+
+  .options-details {
+    background: white;
+    overflow-x: auto;
+  }
+
+  .options-details.hidden {
+    display: none;
+  }
+
+  .options-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border: 1px solid #e2e8f0;
+    font-size: 0.875rem;
+  }
+
+  th, td {
+    padding: 0.5rem;
+    text-align: right;
+    border-bottom: 1px solid #e2e8f0;
+    white-space: nowrap;
+  }
+
+  th:first-child, td:first-child {
+    text-align: left;
+  }
+
+  th {
+    background: #f7fafc;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+  }
+
+  tr:hover {
+    background: #f8fafc;
+  }
+
+  tr:nth-child(even) {
+    background: #fafafa;
+  }
+
+  .in-the-money {
+    color: #2563eb;
+    font-weight: 600;
+  }
+
+  .out-of-the-money {
+    color: #dc2626;
+    font-weight: 600;
+  }
+</style>
