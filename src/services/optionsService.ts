@@ -79,8 +79,8 @@ export class OptionsService {
 
     const today = new Date();
     const priceRange = {
-      min: currentPrice * 0.8,
-      max: currentPrice * 1.2
+      min: currentPrice * 0.9,
+      max: currentPrice * 1.1
     };
 
     // Process all expiry dates
