@@ -1,3 +1,5 @@
+import { ReturnCalculator } from './returnCalculator';
+
 export const formatContractName = (contractName: string): string => {
   const year = contractName.slice(4, 6);
   const month = contractName.slice(6, 8);
@@ -13,23 +15,30 @@ export const getStrikeClass = (strike: number, currentPrice: number): string => 
   return strike < currentPrice ? 'in-the-money' : 'out-of-the-money';
 };
 
-export const calculateAnnualizedPremium = (option: OptionData): number => {
+export const calculateAnnualizedPremium = (option: OptionData, currentPrice: number): number => {
   const daysToExpiry = Math.ceil(
     (new Date(option.expirationDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
   );
-  return (option.bid / option.strike) * (365 / daysToExpiry) * 100;
+
+  return ReturnCalculator.calculateAnnualizedReturn({
+    premium: option.bid,
+    strike: option.strike,
+    daysToExpiry,
+    marginRate: 0.20
+  });
 };
 
 export const getPremiumClass = (option: OptionData, currentPrice: number): string => {
-  const annualizedPremiumPct = calculateAnnualizedPremium(option);
+  const annualizedPremiumPct = calculateAnnualizedPremium(option, currentPrice);
+  return ReturnCalculator.getReturnClass(annualizedPremiumPct);
+};
 
-  // Thresholds for premium classification
-  if (annualizedPremiumPct >= 15) {
-    return 'premium-high';
-  } else if (annualizedPremiumPct >= 8) {
-    return 'premium-medium';
-  }
-  return 'premium-low';
+export const calculateSimpleReturn = (option: OptionData): number => {
+  return ReturnCalculator.calculateSimpleReturn({
+    premium: option.bid,
+    strike: option.strike,
+    marginRate: 0.20
+  });
 };
 
 export const groupOptionsByExpiry = (options: OptionData[]) => {
@@ -78,4 +87,16 @@ export interface OptionData {
   delta?: number;
   gamma?: number;
   theta?: number;
-} 
+}
+
+export const getThetaClass = (theta: number | undefined): string => {
+  if (!theta) return '';
+  
+  // From a seller's perspective:
+  // More negative theta is better (faster time decay)
+  if (theta <= -0.03) return 'theta-excellent';     // Very favorable decay
+  if (theta <= -0.02) return 'theta-good';          // Good decay
+  if (theta <= -0.01) return 'theta-moderate';      // Moderate decay
+  if (theta < 0) return 'theta-weak';               // Weak decay
+  return 'theta-unfavorable';                       // No decay or positive theta
+}; 

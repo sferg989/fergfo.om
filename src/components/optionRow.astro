@@ -1,0 +1,39 @@
+---
+import type { OptionData } from '../utils/optionsUtils';
+import { getStrikeClass, getThetaClass, calculateSimpleReturn, calculateAnnualizedPremium, getPremiumClass, formatContractName } from '../utils/optionsUtils';
+import { OptionScorer } from '../utils/optionScorer';
+import '../styles/optionRow.css';
+
+interface Props {
+  option: OptionData;
+  currentPrice: number;
+  showExpiry?: boolean;
+}
+
+const { option, currentPrice, showExpiry = false } = Astro.props;
+const score = OptionScorer.calculateScore(option, currentPrice);
+---
+<tr class={`${getPremiumClass(option, currentPrice)} ${OptionScorer.getScoreClass(score.total)}`}>
+  <td class="score-cell">
+    <div class="score-value">{score.total.toFixed(0)}</div>
+    <div class="score-breakdown">
+      <span class="premium">P: {score.premiumScore.toFixed(1)}</span>
+      <span class="theta">θ: {score.thetaScore.toFixed(1)}</span>
+      <span class="strike">S: {score.strikeScore.toFixed(1)}</span>
+      <span class="dte">T: {score.dteScore.toFixed(1)}</span>
+    </div>
+  </td>
+  {showExpiry && <td>{formatContractName(option.contractName)}</td>}
+  <td class={getStrikeClass(option.strike, currentPrice)}>
+    ${option.strike.toFixed(2)}
+  </td>
+  <td>${option.bid.toFixed(2)}</td>
+  <td>${option.ask.toFixed(2)}</td>
+  <td>{option.volume}</td>
+  <td>{(option.impliedVolatility * 100).toFixed(1)}%</td>
+  <td class={getThetaClass(option.theta)}>
+    {option.theta ? option.theta.toFixed(4) : 'N/A'}
+  </td>
+  <td>{calculateSimpleReturn(option).toFixed(2)}%</td>
+  <td>{calculateAnnualizedPremium(option, currentPrice).toFixed(1)}%</td>
+</tr>

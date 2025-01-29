@@ -1,0 +1,76 @@
+/* Score cell styling */
+.score-cell {
+  padding: 0.5rem !important;
+  text-align: center !important;
+}
+
+.score-value {
+  font-size: 1.2rem;
+  font-weight: bold;
+  margin-bottom: 0.2rem;
+}
+
+.score-breakdown {
+  display: flex;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+  justify-content: center;
+  color: #666;
+}
+
+/* Score colors */
+.score-excellent .score-value { color: #059669; }
+.score-good .score-value { color: #0891b2; }
+.score-moderate .score-value { color: #b45309; }
+.score-weak .score-value { color: #9ca3af; }
+.score-poor .score-value { color: #dc2626; }
+
+/* Row background colors */
+tr.score-excellent { background-color: rgba(5, 150, 105, 0.1) !important; }
+tr.score-good { background-color: rgba(8, 145, 178, 0.1) !important; }
+tr.score-moderate { background-color: rgba(180, 83, 9, 0.1) !important; }
+tr.score-weak { background-color: rgba(156, 163, 175, 0.1) !important; }
+tr.score-poor { background-color: rgba(220, 38, 38, 0.1) !important; }
+
+/* Row hover states */
+tr:hover.score-excellent { background-color: rgba(5, 150, 105, 0.2) !important; }
+tr:hover.score-good { background-color: rgba(8, 145, 178, 0.2) !important; }
+tr:hover.score-moderate { background-color: rgba(180, 83, 9, 0.2) !important; }
+tr:hover.score-weak { background-color: rgba(156, 163, 175, 0.2) !important; }
+tr:hover.score-poor { background-color: rgba(220, 38, 38, 0.2) !important; }
+
+/* Strike price styling */
+.in-the-money {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.out-of-the-money {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+/* Premium styling */
+.premium-high {
+  background-color: rgba(34, 197, 94, 0.2) !important;
+}
+
+.premium-high:hover {
+  background-color: rgba(34, 197, 94, 0.3) !important;
+}
+
+.premium-medium {
+  background-color: rgba(245, 158, 11, 0.2) !important;
+}
+
+.premium-medium:hover {
+  background-color: rgba(245, 158, 11, 0.3) !important;
+}
+
+.premium-low {
+  background-color: rgba(239, 68, 68, 0.2) !important;
+}
+
+.premium-low:hover {
+  background-color: rgba(239, 68, 68, 0.3) !important;
+} 

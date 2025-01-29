@@ -2,6 +2,7 @@
 import { OptionsService } from '../services/optionsService';
 import { groupOptionsByExpiry } from '../utils/optionsUtils';
 import OptionsGroup from './optionsGroup.astro';
+import HighScoreOptions from './highScoreOptions.astro';
 
 interface Props {
   symbol: string;
@@ -20,6 +21,8 @@ const sortedGroups = groupOptionsByExpiry(options);
       Range: ${(currentPrice * 0.9).toFixed(2)} - ${(currentPrice * 1.1).toFixed(2)}
     </span>
   </div>
+
+  <HighScoreOptions options={options} currentPrice={currentPrice} />
 
   <div class="expiry-groups">
     {sortedGroups.map((group) => (
