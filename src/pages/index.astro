@@ -1,7 +1,19 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import OptionsTable from '../components/OptionsTable.astro';
 ---
 
 <Layout>
-  <h1>Hello World</h1>
+  <main class="container mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold mb-6">Stock Options Data</h1>
+    <OptionsTable symbol="AAPL" />
+  </main>
 </Layout>
+
+<style>
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+</style>
+
