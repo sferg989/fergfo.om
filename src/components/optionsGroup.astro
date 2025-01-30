@@ -1,0 +1,44 @@
+---
+import type { GroupedOption } from '../utils/optionsUtils';
+import OptionRow from './optionRow.astro';
+import '../styles/optionsGroup.css';
+import '../styles/optionsTable.css';
+import '../styles/optionIndicators.css';
+
+interface Props {
+  group: GroupedOption;
+  currentPrice: number;
+}
+
+const { group, currentPrice } = Astro.props;
+---
+
+<div class="expiry-group">
+  <button class="expiry-header">
+    <span class="expiry-date">{group.expiryDate}</span>
+    <span class="days-to-expiry">{group.daysToExpiry} days</span>
+    <span class="contract-count">{group.options.length} contracts</span>
+  </button>
+  <div class="options-details hidden">
+    <table class="options-table">
+      <thead>
+        <tr>
+          <th>Score</th>
+          <th>Strike</th>
+          <th>Bid</th>
+          <th>Ask</th>
+          <th>Volume</th>
+          <th>IV%</th>
+          <th>Theta</th>
+          <th>Simple%</th>
+          <th>Ann. Prem%</th>
+        </tr>
+      </thead>
+      <tbody>
+        {group.options.map((option) => (
+          <OptionRow option={option} currentPrice={currentPrice} />
+        ))}
+      </tbody>
+    </table>
+  </div>
+</div>

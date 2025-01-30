@@ -1,0 +1,58 @@
+---
+import type { OptionData } from '../utils/optionsUtils';
+import OptionRow from './optionRow.astro';
+import { OptionScorer } from '../utils/optionScorer';
+import '../styles/optionsTable.css';
+
+interface Props {
+  options: OptionData[];
+  currentPrice: number;
+  minScore?: number;
+}
+
+const { options, currentPrice, minScore = 97 } = Astro.props;
+
+const highScoreOptions = options.filter(option => {
+  const score = OptionScorer.calculateScore(option, currentPrice);
+  return score.total >= minScore;
+});
+---
+{highScoreOptions.length > 0 && (
+  <div class="high-score-section mb-6">
+    <h2 class="text-xl font-bold mb-3">🌟 High Score Options (95+)</h2>
+    <table class="options-table">
+      <thead>
+        <tr>
+          <th>Score</th>
+          <th>Expiry</th>
+          <th>Strike</th>
+          <th>Bid</th>
+          <th>Ask</th>
+          <th>Volume</th>
+          <th>IV%</th>
+          <th>Theta</th>
+          <th>Simple%</th>
+          <th>Ann. Prem%</th>
+        </tr>
+      </thead>
+      <tbody>
+        {highScoreOptions.map((option) => (
+          <OptionRow
+            option={option}
+            currentPrice={currentPrice}
+            showExpiry={true}
+          />
+        ))}
+      </tbody>
+    </table>
+  </div>
+)}
+
+<style>
+  .high-score-section {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid #e9ecef;
+  }
+</style>

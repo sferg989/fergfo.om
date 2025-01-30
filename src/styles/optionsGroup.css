@@ -1,0 +1,35 @@
+.expiry-group {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  overflow: hidden;
+}
+
+.expiry-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: #f8fafc;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.expiry-header:hover {
+  background: #f1f5f9;
+}
+
+.days-to-expiry, .contract-count {
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+.options-details {
+  background: white;
+  overflow-x: auto;
+}
+
+.options-details.hidden {
+  display: none;
+} 

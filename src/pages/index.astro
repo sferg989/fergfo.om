@@ -1,7 +1,112 @@
 ---
+export const prerender = false;
+
 import Layout from '../layouts/Layout.astro';
+import OptionsTable from '../components/OptionsTable.astro';
+
+// Get the symbol from URL params with more robust handling
+const currentUrl = new URL(Astro.request.url);
+const symbol = currentUrl.searchParams.get('symbol')?.toUpperCase();
+
+
 ---
 
 <Layout>
-  <h1>Hello World</h1>
+  <main class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-8">
+      <h1 class="text-3xl font-bold">Stock Options Data</h1>
+
+      <form class="flex items-center gap-3" id="symbolForm">
+        <div class="form-group">
+          <input
+            type="text"
+            id="symbol"
+            name="symbol"
+            value={symbol || ''}
+            class="w-32 h-10 px-3 py-2 text-lg uppercase font-semibold rounded border border-gray-300
+              focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all"
+            placeholder="Enter symbol"
+            pattern="[A-Za-z]+"
+            maxlength="5"
+            required
+          />
+        </div>
+        <button
+          type="submit"
+          class="h-10 px-6 bg-blue-600 text-white font-medium rounded hover:bg-blue-700
+            focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+        >
+          Load Options
+        </button>
+      </form>
+    </div>
+
+    {symbol ? (
+      <OptionsTable symbol={symbol} />
+    ) : (
+      <div class="text-center p-8 bg-gray-50 rounded-lg">
+        <p class="text-gray-600">Enter a stock symbol to view options data</p>
+      </div>
+    )}
+  </main>
 </Layout>
+
+<style>
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  input:invalid {
+    border-color: #ef4444;
+  }
+</style>
+
+<script>
+  // Handle form submission
+  const form = document.getElementById('symbolForm');
+  const input = document.getElementById('symbol') as HTMLInputElement;
+
+  // Convert input to uppercase as user types
+  input?.addEventListener('input', (e) => {
+    const target = e.target as HTMLInputElement;
+    target.value = target.value.toUpperCase();
+  });
+
+  form?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target as HTMLFormElement);
+    const symbol = formData.get('symbol')?.toString().toUpperCase().trim();
+    if (symbol) {
+      // Force reload with new symbol
+      const url = new URL(window.location.href);
+      url.searchParams.set('symbol', symbol);
+      window.location.href = url.toString();
+    }
+  });
+
+  // Set up auto-refresh
+  let refreshInterval: ReturnType<typeof setInterval>;
+
+  function startAutoRefresh() {
+    refreshInterval = setInterval(() => {
+      const url = new URL(window.location.href);
+      const currentSymbol = url.searchParams.get('symbol');
+      if (currentSymbol) {
+        console.log('Auto-refreshing data for:', currentSymbol);
+        window.location.reload();
+      }
+    }, 60000); // 60 seconds
+  }
+
+  // Start auto-refresh when page loads
+  startAutoRefresh();
+
+  // Clean up interval when page unloads
+  window.addEventListener('unload', () => {
+    if (refreshInterval) {
+      clearInterval(refreshInterval);
+    }
+  });
+</script>
+

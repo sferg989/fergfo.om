@@ -1,0 +1,33 @@
+.options-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border: 1px solid #e2e8f0;
+  font-size: 0.875rem;
+}
+
+th, td {
+  padding: 0.5rem;
+  text-align: right;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+th:first-child, td:first-child {
+  text-align: left;
+}
+
+th {
+  background: #f7fafc;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+}
+
+tr:hover {
+  background: #f8fafc;
+}
+
+tr:nth-child(even) {
+  background: #fafafa;
+} 
