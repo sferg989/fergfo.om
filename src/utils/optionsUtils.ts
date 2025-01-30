@@ -64,7 +64,7 @@ export const calculateSimpleReturn = (option: OptionData): number => {
 };
 
 export const groupOptionsByExpiry = (options: OptionData[]) => {
-  console.log('options', options);
+  
   const groups = options.reduce((acc, option) => {
     const date = new Date(option.expirationDate);
     const today = new Date();

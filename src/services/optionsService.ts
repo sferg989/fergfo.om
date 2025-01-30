@@ -1,3 +1,5 @@
+import { optional } from "astro:schema";
+
 export interface OptionData {
   contractName: string;
   strike: number;
@@ -13,14 +15,36 @@ export interface OptionData {
   theta?: number;
 }
 
-interface OptionChainData {
+interface RawOptionData {
+  contractName: string;
+  contractSize: string;
+  type: string;
+  strike: number;
+  lastPrice: number;
+  bid: number;
+  ask: number;
+  volume: number;
+  openInterest: number;
   expirationDate: string;
-  options: {
-    CALL: OptionData[];
-    PUT: OptionData[];
-  }
+  impliedVolatility: number;
+  delta?: number;
+  gamma?: number;
+  theta?: number;
 }
 
+interface ApiResponse {
+  code: string;
+  exchange: string;
+  lastTradeDate: string;
+  lastTradePrice: number;
+  data: {
+    expirationDate: string;
+    options: {
+      PUT: RawOptionData[];
+      CALL: RawOptionData[];
+    }
+  }[];
+}
 
 export class OptionsService {
   private static instance: OptionsService;
@@ -48,7 +72,7 @@ export class OptionsService {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
-      console.log('Current price data:', data);
+      
       return data.c || 0; // Current price
     } catch (error) {
       console.error('Error fetching current price:', error);
@@ -56,67 +80,35 @@ export class OptionsService {
     }
   }
 
-  async fetchOptionsData(symbol: string): Promise<{ 
-    options: OptionData[], 
-    currentPrice: number,
-    error?: string 
-  }> {
+  async fetchOptionsData(symbol: string): Promise<{ options: OptionData[]; currentPrice: number; error?: string }> {
     try {
-      if (!symbol || typeof symbol !== 'string') {
-        return {
-          options: [],
-          currentPrice: 0,
-          error: 'Please provide a valid symbol'
-        };
+      const cacheKey = `options_${symbol}`;
+      const cachedData = this.cache.get(cacheKey);
+      
+      if (cachedData && Date.now() - cachedData.timestamp < this.CACHE_DURATION) {
+        return cachedData.data;
       }
 
-      const normalizedSymbol = symbol.trim().toUpperCase();
-      console.log('Fetching data for symbol:', normalizedSymbol);
-      
-      // Clear expired cache entries
-      this.clearExpiredCache();
-
-      const cacheKey = normalizedSymbol;
-      const cached = this.cache.get(cacheKey);
-      
-      if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
-        console.log('Returning cached data for:', normalizedSymbol);
-        return cached.data;
-      }
-
-      const [currentPrice, response] = await Promise.all([
-        this.getCurrentPrice(normalizedSymbol),
-        fetch(`https://finnhub.io/api/v1/stock/option-chain?symbol=${normalizedSymbol}&token=${this.apiKey}`)
-      ]);
+      const response = await fetch(
+        `https://finnhub.io/api/v1/stock/option-chain?symbol=${symbol}&token=${this.apiKey}`
+      );
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      if (!currentPrice) {
-        const error = `Unable to fetch data for symbol ${normalizedSymbol}`;
-        console.error(error);
-        return { options: [], currentPrice: 0, error };
-      }
-
-      const data = await response.json();
-      console.log('Options chain response:', data);
+      const data: ApiResponse = await response.json();
+      const currentPrice = data.lastTradePrice;
 
       if (!data.data || !data.data.length) {
-        const error = `No options data available for ${normalizedSymbol}`;
-        console.error(error);
-        return { options: [], currentPrice, error };
+        throw new Error('No options data available');
       }
 
       const options = this.transformOptionsData(data.data, currentPrice);
-      const result = { options, currentPrice };
-      
-      // Cache the result
-      this.cache.set(cacheKey, {
-        timestamp: Date.now(),
-        data: result
-      });
 
+      const result = { options, currentPrice };
+      this.cache.set(cacheKey, { timestamp: Date.now(), data: result });
+      
       return result;
     } catch (error) {
       console.error('Error fetching options data:', error);
@@ -129,16 +121,7 @@ export class OptionsService {
     }
   }
 
-  private clearExpiredCache() {
-    const now = Date.now();
-    for (const [key, value] of this.cache.entries()) {
-      if (now - value.timestamp >= this.CACHE_DURATION) {
-        this.cache.delete(key);
-      }
-    }
-  }
-
-  private transformOptionsData(data: OptionChainData[], currentPrice: number): OptionData[] {
+  private transformOptionsData(data: ApiResponse['data'], currentPrice: number): OptionData[] {
     if (!data || !data.length) {
       return [];
     }
@@ -150,6 +133,20 @@ export class OptionsService {
     };
 
     // Process all expiry dates
+    console.log('data', data[5].expirationDate)
+    // console.log('data', data[5].options.PUT)
+    const rightdata = data[5].options.PUT.filter(option=>{
+
+      if (option.strike==390) {
+        console.log(option);
+        
+        return option
+      }
+      
+    })
+
+    console.log(rightdata);
+    
     return data.flatMap(dateGroup => {
       if (!dateGroup.options?.PUT) return [];
 
@@ -161,7 +158,7 @@ export class OptionsService {
                  option.strike <= priceRange.max && 
                  daysToExpiry <= 60;
         })
-        .map((option) => ({
+        .map((option): OptionData => ({
           contractName: option.contractName,
           strike: option.strike,
           lastPrice: option.lastPrice,

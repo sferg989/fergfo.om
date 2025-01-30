@@ -12,13 +12,7 @@ const { symbol } = Astro.props;
 const optionsService = OptionsService.getInstance();
 const { options, currentPrice, error } = await optionsService.fetchOptionsData(symbol);
 const sortedGroups = groupOptionsByExpiry(options);
-console.log('options');
-console.log('options');
-console.log('options', options);
-console.log('options', options);
-console.log('options', options);
-console.log('options', options);
-console.log(options);
+
 ---
 
 <div class="options-table-container">
