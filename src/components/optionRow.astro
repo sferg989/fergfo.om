@@ -12,8 +12,9 @@ interface Props {
 
 const { option, currentPrice, showExpiry = false } = Astro.props;
 const score = OptionScorer.calculateScore(option, currentPrice);
+const expiryDate = formatContractName(option.contractName);
 ---
-<tr class={`${getPremiumClass(option, currentPrice)} ${OptionScorer.getScoreClass(score.total)}`}>
+<tr class={`${getPremiumClass(option)} ${OptionScorer.getScoreClass(score.total)}`}>
   <td class="score-cell">
     <div class="score-value">{score.total.toFixed(0)}</div>
     <div class="score-breakdown">
@@ -23,7 +24,7 @@ const score = OptionScorer.calculateScore(option, currentPrice);
       <span class="dte">T: {score.dteScore.toFixed(1)}</span>
     </div>
   </td>
-  {showExpiry && <td>{formatContractName(option.contractName)}</td>}
+  {showExpiry && <td class="expiry-cell">{expiryDate}</td>}
   <td class={getStrikeClass(option.strike, currentPrice)}>
     ${option.strike.toFixed(2)}
   </td>
@@ -35,5 +36,12 @@ const score = OptionScorer.calculateScore(option, currentPrice);
     {option.theta ? option.theta.toFixed(4) : 'N/A'}
   </td>
   <td>{calculateSimpleReturn(option).toFixed(2)}%</td>
-  <td>{calculateAnnualizedPremium(option, currentPrice).toFixed(1)}%</td>
+  <td>{calculateAnnualizedPremium(option).toFixed(1)}%</td>
 </tr>
+
+<style>
+  .expiry-cell {
+    white-space: nowrap;
+    font-size: 0.9rem;
+  }
+</style>

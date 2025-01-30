@@ -10,25 +10,43 @@ interface Props {
 
 const { symbol } = Astro.props;
 const optionsService = OptionsService.getInstance();
-const { options, currentPrice } = await optionsService.fetchOptionsData(symbol);
+const { options, currentPrice, error } = await optionsService.fetchOptionsData(symbol);
 const sortedGroups = groupOptionsByExpiry(options);
+console.log('options');
+console.log('options');
+console.log('options', options);
+console.log('options', options);
+console.log('options', options);
+console.log('options', options);
+console.log(options);
 ---
 
 <div class="options-table-container">
-  <div class="current-price">
-    <span>Current Price: ${currentPrice.toFixed(4)}</span>
-    <span class="price-range">
-      Range: ${(currentPrice * 0.9).toFixed(2)} - ${(currentPrice * 1.1).toFixed(2)}
-    </span>
-  </div>
+  {error ? (
+    <div class="error-message">
+      {error}. Please check the symbol and try again.
+    </div>
+  ) : (
+    <>
+      <div class="current-price">
+        <div class="flex items-center gap-2">
+          <span class="symbol">{symbol}</span>
+          <span class="price">Current Price: ${currentPrice.toFixed(4)}</span>
+        </div>
+        <span class="price-range">
+          Range: ${(currentPrice * 0.9).toFixed(2)} - ${(currentPrice * 1.1).toFixed(2)}
+        </span>
+      </div>
 
-  <HighScoreOptions options={options} currentPrice={currentPrice} />
+      <HighScoreOptions options={options} currentPrice={currentPrice} />
 
-  <div class="expiry-groups">
-    {sortedGroups.map((group) => (
-      <OptionsGroup group={group} currentPrice={currentPrice} />
-    ))}
-  </div>
+      <div class="expiry-groups">
+        {sortedGroups.map((group) => (
+          <OptionsGroup group={group} currentPrice={currentPrice} />
+        ))}
+      </div>
+    </>
+  )}
 </div>
 
 <style>
@@ -44,9 +62,14 @@ const sortedGroups = groupOptionsByExpiry(options);
     font-size: 1.2rem;
     font-weight: bold;
     margin-bottom: 1rem;
-    padding: 0.5rem;
+    padding: 1rem;
     background: #f7fafc;
     border-radius: 0.375rem;
+  }
+
+  .symbol {
+    font-size: 1.5rem;
+    color: #2563eb;
   }
 
   .price-range {
@@ -59,6 +82,15 @@ const sortedGroups = groupOptionsByExpiry(options);
     flex-direction: column;
     gap: 0.5rem;
   }
+
+  .error-message {
+    padding: 1rem;
+    background-color: #fee2e2;
+    border: 1px solid #ef4444;
+    border-radius: 0.375rem;
+    color: #991b1b;
+    margin: 1rem 0;
+  }
 </style>
 
 <script>
@@ -69,7 +101,4 @@ const sortedGroups = groupOptionsByExpiry(options);
       details.classList.toggle('hidden');
     });
   });
-
-  // Refresh data every 60 seconds
-  setInterval(() => location.reload(), 60000);
 </script>

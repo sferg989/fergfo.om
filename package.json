@@ -8,11 +8,13 @@
     "build": "astro check && astro build",
     "preview": "astro preview",
     "lint": "eslint --fix \"src/**/*.{js,ts,jsx,tsx,astro}\"",
+    "all": "astro check && eslint --fix \"src/**/*.{js,ts,jsx,tsx,astro}\"",
     "astro:check": "astro check",
     "astro": "astro"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.4",
+    "@astrojs/cloudflare": "^12.2.1",
     "@astrojs/sitemap": "^3.2.1",
     "@sferg989/astro-utils": "^1.0.0",
     "astro": "^5.0.2",

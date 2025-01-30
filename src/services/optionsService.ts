@@ -21,16 +21,12 @@ interface OptionChainData {
   }
 }
 
-interface GroupedOptions {
-  expiryDate: string;
-  rawExpiryDate: string;
-  daysToExpiry: number;
-  options: OptionData[];
-}
 
 export class OptionsService {
   private static instance: OptionsService;
   private apiKey: string;
+  private cache: Map<string, { timestamp: number, data: any }> = new Map();
+  private CACHE_DURATION = 60000; // 60 seconds
 
   private constructor() {
     this.apiKey = import.meta.env.PUBLIC_FINNHUB_API_KEY;
@@ -48,27 +44,97 @@ export class OptionsService {
       const response = await fetch(
         `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${this.apiKey}`
       );
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       const data = await response.json();
-      return data.c; // Current price
+      console.log('Current price data:', data);
+      return data.c || 0; // Current price
     } catch (error) {
       console.error('Error fetching current price:', error);
       return 0;
     }
   }
 
-  async fetchOptionsData(symbol: string): Promise<{ options: OptionData[], currentPrice: number }> {
+  async fetchOptionsData(symbol: string): Promise<{ 
+    options: OptionData[], 
+    currentPrice: number,
+    error?: string 
+  }> {
     try {
+      if (!symbol || typeof symbol !== 'string') {
+        return {
+          options: [],
+          currentPrice: 0,
+          error: 'Please provide a valid symbol'
+        };
+      }
+
+      const normalizedSymbol = symbol.trim().toUpperCase();
+      console.log('Fetching data for symbol:', normalizedSymbol);
+      
+      // Clear expired cache entries
+      this.clearExpiredCache();
+
+      const cacheKey = normalizedSymbol;
+      const cached = this.cache.get(cacheKey);
+      
+      if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
+        console.log('Returning cached data for:', normalizedSymbol);
+        return cached.data;
+      }
+
       const [currentPrice, response] = await Promise.all([
-        this.getCurrentPrice(symbol),
-        fetch(`https://finnhub.io/api/v1/stock/option-chain?symbol=${symbol}&token=${this.apiKey}`)
+        this.getCurrentPrice(normalizedSymbol),
+        fetch(`https://finnhub.io/api/v1/stock/option-chain?symbol=${normalizedSymbol}&token=${this.apiKey}`)
       ]);
 
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      if (!currentPrice) {
+        const error = `Unable to fetch data for symbol ${normalizedSymbol}`;
+        console.error(error);
+        return { options: [], currentPrice: 0, error };
+      }
+
       const data = await response.json();
+      console.log('Options chain response:', data);
+
+      if (!data.data || !data.data.length) {
+        const error = `No options data available for ${normalizedSymbol}`;
+        console.error(error);
+        return { options: [], currentPrice, error };
+      }
+
       const options = this.transformOptionsData(data.data, currentPrice);
-      return { options, currentPrice };
+      const result = { options, currentPrice };
+      
+      // Cache the result
+      this.cache.set(cacheKey, {
+        timestamp: Date.now(),
+        data: result
+      });
+
+      return result;
     } catch (error) {
       console.error('Error fetching options data:', error);
-      return { options: [], currentPrice: 0 };
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return { 
+        options: [], 
+        currentPrice: 0, 
+        error: `Failed to fetch options data: ${errorMessage}` 
+      };
+    }
+  }
+
+  private clearExpiredCache() {
+    const now = Date.now();
+    for (const [key, value] of this.cache.entries()) {
+      if (now - value.timestamp >= this.CACHE_DURATION) {
+        this.cache.delete(key);
+      }
     }
   }
 
