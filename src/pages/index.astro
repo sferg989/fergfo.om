@@ -3,6 +3,7 @@ export const prerender = false;
 
 import Layout from '../layouts/Layout.astro';
 import OptionsTable from '../components/OptionsTable.astro';
+import SearchForm from '../components/searchForm.astro';
 
 // Get the symbol from URL params with more robust handling
 const currentUrl = new URL(Astro.request.url);
@@ -11,34 +12,11 @@ const symbol = currentUrl.searchParams.get('symbol')?.toUpperCase();
 
 ---
 
-<Layout>
+<Layout title={symbol ? `${symbol} Options Data` : 'Stock Options Data'}>
   <main class="container mx-auto px-4 py-8">
     <div class="flex justify-between items-center mb-8">
-      <h1 class="text-3xl font-bold">Stock Options Data</h1>
-
-      <form class="flex items-center gap-3" id="symbolForm">
-        <div class="form-group">
-          <input
-            type="text"
-            id="symbol"
-            name="symbol"
-            value={symbol || ''}
-            class="w-32 h-10 px-3 py-2 text-lg uppercase font-semibold rounded border border-gray-300
-              focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all"
-            placeholder="Enter symbol"
-            pattern="[A-Za-z]+"
-            maxlength="5"
-            required
-          />
-        </div>
-        <button
-          type="submit"
-          class="h-10 px-6 bg-blue-600 text-white font-medium rounded hover:bg-blue-700
-            focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
-        >
-          Load Options
-        </button>
-      </form>
+      <h1 class="text-3xl font-bold text-gray-800">Stock Options Data</h1>
+      <SearchForm symbol={symbol} />
     </div>
 
     {symbol ? (
@@ -58,34 +36,83 @@ const symbol = currentUrl.searchParams.get('symbol')?.toUpperCase();
   }
 
   input:invalid {
-    border-color: #ef4444;
+    @apply border-red-200;
+    background: linear-gradient(
+      to bottom right,
+      rgba(255, 255, 255, 0.9),
+      rgba(254, 226, 226, 0.3)
+    );
+  }
+
+  input:invalid:focus {
+    @apply border-red-400 ring-red-100;
+  }
+
+  .form-group {
+    position: relative;
+    display: inline-block;
+  }
+
+  /* Enhanced input focus animation */
+  input:focus {
+    transform: translateY(-1px);
+    box-shadow:
+      inset 0 2px 4px rgba(0,0,0,0.06),
+      0 4px 12px rgba(59, 130, 246, 0.1);
+  }
+
+  /* Floating label animation */
+  .form-group:focus-within div {
+    transform: translateY(-1px);
+    color: rgb(37, 99, 235);
+    border-color: rgba(37, 99, 235, 0.2);
+    background: linear-gradient(to right, rgba(255,255,255,0.9), rgba(255,255,255,1));
+  }
+
+  /* Glass morphism effect on hover */
+  input:hover {
+    background: linear-gradient(
+      to bottom right,
+      rgba(255, 255, 255, 0.9),
+      rgba(255, 255, 255, 0.8)
+    );
+  }
+
+  /* Add subtle text shadow to input text */
+  input {
+    text-shadow: 0 1px 1px rgba(0,0,0,0.1);
+  }
+
+  /* Add shimmer effect on hover */
+  button:hover::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(
+      120deg,
+      transparent,
+      rgba(255, 255, 255, 0.2),
+      transparent
+    );
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    100% {
+      left: 200%;
+    }
+  }
+
+  /* Smooth transition for input focus */
+  input {
+    transition: all 0.2s ease-in-out;
   }
 </style>
 
 <script>
-  // Handle form submission
-  const form = document.getElementById('symbolForm');
-  const input = document.getElementById('symbol') as HTMLInputElement;
-
-  // Convert input to uppercase as user types
-  input?.addEventListener('input', (e) => {
-    const target = e.target as HTMLInputElement;
-    target.value = target.value.toUpperCase();
-  });
-
-  form?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target as HTMLFormElement);
-    const symbol = formData.get('symbol')?.toString().toUpperCase().trim();
-    if (symbol) {
-      // Force reload with new symbol
-      const url = new URL(window.location.href);
-      url.searchParams.set('symbol', symbol);
-      window.location.href = url.toString();
-    }
-  });
-
-  // Set up auto-refresh
   let refreshInterval: ReturnType<typeof setInterval>;
 
   function startAutoRefresh() {
@@ -99,10 +126,8 @@ const symbol = currentUrl.searchParams.get('symbol')?.toUpperCase();
     }, 60000); // 60 seconds
   }
 
-  // Start auto-refresh when page loads
   startAutoRefresh();
 
-  // Clean up interval when page unloads
   window.addEventListener('unload', () => {
     if (refreshInterval) {
       clearInterval(refreshInterval);
