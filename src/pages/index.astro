@@ -15,7 +15,15 @@ const symbol = currentUrl.searchParams.get('symbol')?.toUpperCase();
 <Layout title={symbol ? `${symbol} Options Data` : 'Stock Options Data'}>
   <main class="container mx-auto px-4 py-8">
     <div class="flex justify-between items-center mb-8">
-      <h1 class="text-3xl font-bold text-gray-800">Stock Options Data</h1>
+      <div class="flex items-center gap-4">
+        <h1 class="text-3xl font-bold text-gray-800">Stock Options Data</h1>
+        <a
+          href="/preferred"
+          class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+        >
+          View Preferred Stocks
+        </a>
+      </div>
       <SearchForm symbol={symbol} />
     </div>
 

@@ -1,0 +1,52 @@
+---
+import { PreferredStocks } from '../enums/preferredStocks';
+import { OptionsService } from '../services/optionsService';
+import HighScoreOptions from './highScoreOptions.astro';
+import { ScoreThresholds } from '../enums/scoreThresholds';
+
+const optionsService = OptionsService.getInstance();
+const preferredStocksData = await Promise.all(
+  Object.values(PreferredStocks).map(async (symbol) => {
+    const { options, currentPrice, error } = await optionsService.fetchOptionsData(symbol);
+    return { symbol, options, currentPrice, error };
+  })
+);
+---
+
+<div class="preferred-stocks-container">
+  <h1 class="text-2xl font-bold mb-6">Preferred Stocks High Score Options</h1>
+
+  <div class="grid gap-8">
+    {preferredStocksData.map(({ symbol, options, currentPrice, error }) => (
+      <div class="stock-section">
+        <h2 class="text-xl font-semibold mb-3 text-blue-600">{symbol}</h2>
+        {error ? (
+          <div class="error-message p-4 bg-red-50 text-red-700 rounded">
+            {error}
+          </div>
+        ) : (
+          <HighScoreOptions
+            options={options}
+            currentPrice={currentPrice}
+            minScore={ScoreThresholds.PREFERRED}
+          />
+        )}
+      </div>
+    ))}
+  </div>
+</div>
+
+<style>
+  .preferred-stocks-container {
+    padding: 1rem;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .stock-section {
+    background: #ffffff;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+</style>

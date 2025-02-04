@@ -1,0 +1,38 @@
+---
+import Layout from '../layouts/Layout.astro';
+import PreferredStocksView from '../components/preferredStocksView.astro';
+---
+
+<Layout title="Preferred Stocks Options">
+  <main class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-8">
+      <h1 class="text-3xl font-bold text-gray-800">Preferred Stocks Options</h1>
+      <a
+        href="/"
+        class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+      >
+        Back to Search
+      </a>
+    </div>
+
+    <PreferredStocksView />
+  </main>
+</Layout>
+
+<script>
+  let refreshInterval: ReturnType<typeof setInterval>;
+
+  function startAutoRefresh() {
+    refreshInterval = setInterval(() => {
+      window.location.reload();
+    }, 300000); // 5 minutes
+  }
+
+  startAutoRefresh();
+
+  window.addEventListener('unload', () => {
+    if (refreshInterval) {
+      clearInterval(refreshInterval);
+    }
+  });
+</script>

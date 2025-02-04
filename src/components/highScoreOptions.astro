@@ -2,6 +2,7 @@
 import type { OptionData } from '../utils/optionsUtils';
 import OptionRow from './optionRow.astro';
 import { OptionScorer } from '../utils/optionScorer';
+import { ScoreThresholds } from '../enums/scoreThresholds';
 import '../styles/optionsTable.css';
 
 interface Props {
@@ -10,7 +11,7 @@ interface Props {
   minScore?: number;
 }
 
-const { options, currentPrice, minScore = 95 } = Astro.props;
+const { options, currentPrice, minScore = ScoreThresholds.STANDARD } = Astro.props;
 
 const highScoreOptions = options.filter(option => {
   const score = OptionScorer.calculateScore(option, currentPrice);
@@ -19,7 +20,7 @@ const highScoreOptions = options.filter(option => {
 ---
 {highScoreOptions.length > 0 && (
   <div class="high-score-section mb-6">
-    <h2 class="text-xl font-bold mb-3">🌟 High Score Options (95+)</h2>
+    <h2 class="text-xl font-bold mb-3">�� High Score Options ({minScore}+)</h2>
     <table class="options-table">
       <thead>
         <tr>

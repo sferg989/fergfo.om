@@ -1,0 +1,17 @@
+export enum PreferredStocks {
+  TSLA = 'TSLA',
+  NET = 'NET',
+  LRCX = 'LRCX',
+  CRWD = 'CRWD',
+  NVDA = 'NVDA',
+  SE = 'SE',
+  KKR = 'KKR',
+  BX = 'BX',
+  AAPL = 'AAPL',
+  GOOGL = 'GOOGL',
+  META = 'META',
+  AMD = 'AMD',
+  AMZN = 'AMZN',
+  NFLX = 'NFLX',
+  MSFT = 'MSFT',
+} 
