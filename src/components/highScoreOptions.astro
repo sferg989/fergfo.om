@@ -10,7 +10,7 @@ interface Props {
   minScore?: number;
 }
 
-const { options, currentPrice, minScore = 97 } = Astro.props;
+const { options, currentPrice, minScore = 95 } = Astro.props;
 
 const highScoreOptions = options.filter(option => {
   const score = OptionScorer.calculateScore(option, currentPrice);
