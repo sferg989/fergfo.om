@@ -20,7 +20,7 @@
 
   Component Development
   - Create .astro files for Astro components.
-  - Use framework-specific components (React, Vue, Svelte) when necessary.
+  - Use astro components when possible
   - Implement proper component composition and reusability.
   - Use Astro's component props for data passing.
   - Leverage Astro's built-in components like <Markdown /> when appropriate.
@@ -31,10 +31,6 @@
   - Use getStaticPaths() for generating static pages with dynamic routes.
   - Implement proper 404 handling with a 404.astro page.
 
-  Content Management
-  - Use Markdown (.md) or MDX (.mdx) files for content-heavy pages.
-  - Leverage Astro's built-in support for frontmatter in Markdown files.
-  - Implement content collections for organized content management.
 
   Styling
   - Use Astro's scoped styling with <style> tags in .astro files.
