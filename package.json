@@ -17,6 +17,7 @@
     "@astrojs/cloudflare": "^12.2.1",
     "@astrojs/sitemap": "^3.2.1",
     "@sferg989/astro-utils": "^1.0.0",
+    "@sferg989/fergfo-piercing-library": "^1.1.0",
     "astro": "^5.0.2",
     "graphql-request": "^7.1.0",
     "jsdom": "^25.0.1",
