@@ -71,7 +71,7 @@ export class OptionsService {
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      const data = await response.json();
+      const data = await response.json() as { c?: number };
       
       return data.c || 0; // Current price
     } catch (error) {

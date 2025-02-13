@@ -1,0 +1,24 @@
+name = "fergfo-com"
+account_id = "bf9a1ae5b7974b7510d15e0d5b6a8ebc"
+compatibility_date = "2024-02-12"
+
+# Entry point for the worker (ensure this file exists in your project)
+main = "worker/script.ts"
+
+[vars]
+APP_BASE_URL = "https://fergfo-om.pages.dev"
+ISOLATE_FRAGMENTS = true
+
+
+
+[[services]]
+binding = "header-fragment"
+service = "fergfo-header-fragment"
+
+[[env.local.services]]
+binding = "header-fragment"
+service = "fergfo-header-fragment"
+
+[[env.reframed.services]]
+binding = "header-fragment"
+service = "fergfo-header-fragment"

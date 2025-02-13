@@ -4,6 +4,8 @@ export const prerender = false;
 import Layout from '../layouts/Layout.astro';
 import OptionsTable from '../components/OptionsTable.astro';
 import SearchForm from '../components/searchForm.astro';
+import SubHeader from '../components/subHeader.astro';
+import Header from '../components/header.astro';
 
 // Get the symbol from URL params with more robust handling
 const currentUrl = new URL(Astro.request.url);
@@ -13,27 +15,21 @@ const symbol = currentUrl.searchParams.get('symbol')?.toUpperCase();
 ---
 
 <Layout title={symbol ? `${symbol} Options Data` : 'Stock Options Data'}>
-  <main class="container mx-auto px-4 py-8">
-    <div class="flex justify-between items-center mb-8">
-      <div class="flex items-center gap-4">
-        <h1 class="text-3xl font-bold text-gray-800">Stock Options Data</h1>
-        <a
-          href="/preferred"
-          class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-        >
-          View Preferred Stocks
-        </a>
-      </div>
+  <main>
+    <Header title="Fergfo Options" />
+    <SubHeader title="Stock Options Data">
       <SearchForm symbol={symbol} />
-    </div>
+    </SubHeader>
 
-    {symbol ? (
-      <OptionsTable symbol={symbol} />
-    ) : (
-      <div class="text-center p-8 bg-gray-50 rounded-lg">
-        <p class="text-gray-600">Enter a stock symbol to view options data</p>
-      </div>
-    )}
+    <div class="container mx-auto px-4 py-8">
+      {symbol ? (
+        <OptionsTable symbol={symbol} />
+      ) : (
+        <div class="text-center p-8 bg-gray-50 rounded-lg">
+          <p class="text-gray-600">Enter a stock symbol to view options data</p>
+        </div>
+      )}
+    </div>
   </main>
 </Layout>
 
