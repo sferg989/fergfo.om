@@ -53,4 +53,6 @@ gateway.registerFragment({
     return true;
   },
 });
+console.log("this worked");
+
 export default gateway;

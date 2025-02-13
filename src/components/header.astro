@@ -3,9 +3,12 @@ interface Props {
   title?: string;
 }
 
-
 ---
 
 <div class="header">
-  <piercing-fragment-outlet fragment-id="header" />
+  <piercing-fragment-outlet fragment-id="header-fragment" />
 </div>
+<script>
+  import { registerPiercingFragmentOutlet } from '@sferg989/fergfo-piercing-library';
+  registerPiercingFragmentOutlet();
+</script>
