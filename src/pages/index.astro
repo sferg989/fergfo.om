@@ -5,7 +5,6 @@ import Layout from '../layouts/Layout.astro';
 import OptionsTable from '../components/OptionsTable.astro';
 import SearchForm from '../components/searchForm.astro';
 import SubHeader from '../components/subHeader.astro';
-import Header from '../components/header.astro';
 
 // Get the symbol from URL params with more robust handling
 const currentUrl = new URL(Astro.request.url);
@@ -16,7 +15,7 @@ const symbol = currentUrl.searchParams.get('symbol')?.toUpperCase();
 
 <Layout title={symbol ? `${symbol} Options Data` : 'Stock Options Data'}>
   <main>
-    <Header title="Fergfo Options" />
+
     <SubHeader title="Stock Options Data">
       <SearchForm symbol={symbol} />
     </SubHeader>
