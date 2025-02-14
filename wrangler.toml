@@ -16,9 +16,9 @@ binding = "header-fragment"
 service = "fergfo-header-fragment"
 
 [[env.local.services]]
-binding = "header-fragment"
+binding = "header"
 service = "fergfo-header-fragment"
 
 [[env.reframed.services]]
-binding = "header-fragment"
+binding = "header"
 service = "fergfo-header-fragment"

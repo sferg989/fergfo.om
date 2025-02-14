@@ -10,7 +10,7 @@ const gateway = new PiercingGateway<Env>({
     return env.APP_BASE_URL;
   },
   isolateFragments(env) {
-    return env.ISOLATE_FRAGMENTS || false;
+    return true;
   },
   shouldPiercingBeEnabled(request: Request) {
     
