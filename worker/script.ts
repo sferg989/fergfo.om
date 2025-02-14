@@ -28,24 +28,24 @@ gateway.registerFragment({
   prePiercingStyles: `
     :not(piercing-fragment-outlet) > piercing-fragment-host {
       position: absolute;
-      top: 10.45rem;
+      top: 0rem;
       left: 1rem;
       right: 1rem;
     }
 
     @media (max-width: 45rem) {
       :not(piercing-fragment-outlet) > piercing-fragment-host {
-        top: 10.58rem;
+        top: 0rem;
       }
     }
     @media (max-width: 35rem) {
       :not(piercing-fragment-outlet) > piercing-fragment-host {
-        top: 13.06rem;
+        top: 0rem;
       }
     }
     @media (max-width: 25rem) {
       :not(piercing-fragment-outlet) > piercing-fragment-host {
-        top: 13.24rem;
+        top: 0rem;
       }
     }
     `,

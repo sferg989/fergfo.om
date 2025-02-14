@@ -1,6 +1,6 @@
 ---
 import Header from '../components/header.astro';
-import SEO from '../components/seo.astro';
+
 import '../styles/global.css';
 
 interface Props {
@@ -14,7 +14,7 @@ const { title, description } = Astro.props;
 <!doctype html>
 <html lang="en">
   <Header title="Fergfo Options" />
-  <body class="min-h-screen bg-gray-50">
+  <body class="min-h-screen bg-gray-50 pt-32">
     <slot />
   </body>
 </html>
