@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@astrojs/tailwind": "^6.0.0",
+    "@cloudflare/workers-types": "^4.20240208.0",
     "@types/jsdom": "^21.1.7",
     "@typescript-eslint/eslint-plugin": "^8.11.0",
     "@typescript-eslint/parser": "^8.2.0",

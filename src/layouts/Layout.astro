@@ -13,8 +13,17 @@ const { title, description } = Astro.props;
 
 <!doctype html>
 <html lang="en">
-  <Header title="Fergfo Options" />
-  <body class="min-h-screen bg-gray-50 pt-32">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <slot name="head" />
+  </head>
+  <body class="min-h-screen bg-gray-50 pt-16">
     <slot />
   </body>
 </html>
+
+<style is:global>
+  /* Your global styles */
+  /* Add any reset styles needed for the header fragment */
+</style>
