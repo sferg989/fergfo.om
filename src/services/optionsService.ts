@@ -133,10 +133,10 @@ export class OptionsService {
     };
 
     // Process all expiry dates
-    console.log('data', data[5].expirationDate)
+    // console.log('data', data[5].expirationDate)
     // console.log('data', data[5].options.PUT)
     const rightdata = data[5].options.PUT.filter(option=>{
-      console.log(option);
+      
       
 
       

@@ -1,0 +1,18 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"command": "source ${env:HOME}/.nvm/nvm.sh && nvm use && npm run all",
+			"problemMatcher": [],
+			"label": "npm: all",
+			"detail": "astro check && eslint --fix \"src/**/*.{js,ts,jsx,tsx,astro}\"",
+			"options": {
+				"shell": {
+					"executable": "/bin/zsh",
+					"args": ["-l", "-i", "-c"]
+				}
+			}
+		}
+	]
+}

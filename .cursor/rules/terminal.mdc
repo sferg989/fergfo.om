@@ -1,0 +1,9 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Termainal Settings
+- before running terminal commands make sure the node version is correct by before everyterminal command .nvmrc
+``` nvm use```

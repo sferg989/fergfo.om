@@ -1,0 +1,7 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+- name files snakeCase.*
+- DO NOT NAME NEW FILES starting with uppercase

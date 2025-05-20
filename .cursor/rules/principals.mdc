@@ -1,0 +1,8 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Always use DRY, SOLID typescript design patterns.  
+- DO NOT use JSDOC.
+- 
