@@ -50,7 +50,7 @@ export class OptionsService {
   private static instance: OptionsService;
   private apiKey: string;
   private cache: Map<string, { timestamp: number, data: any }> = new Map();
-  private CACHE_DURATION = 60000; // 60 seconds
+  private CACHE_DURATION = 3600000; // 60 minutes (3600000 ms)
 
   private constructor() {
     this.apiKey = import.meta.env.PUBLIC_FINNHUB_API_KEY;
@@ -63,8 +63,43 @@ export class OptionsService {
     return this.instance;
   }
 
-  async getCurrentPrice(symbol: string): Promise<number> {
+  private isCached(key: string): boolean {
+    const cachedData = this.cache.get(key);
+    return !!cachedData && (Date.now() - cachedData.timestamp) < this.CACHE_DURATION;
+  }
+
+  private getCachedData<T>(key: string): T | null {
+    if (this.isCached(key)) {
+      return this.cache.get(key)!.data as T;
+    }
+    return null;
+  }
+
+  private setCachedData<T>(key: string, data: T): void {
+    this.cache.set(key, { timestamp: Date.now(), data });
+  }
+
+  // Method to clear cache for testing purposes or manual refresh
+  clearCache(symbol?: string): void {
+    if (symbol) {
+      // Clear cache for specific symbol
+      const keys = [`price_${symbol}`, `options_${symbol}`];
+      keys.forEach(key => this.cache.delete(key));
+    } else {
+      // Clear entire cache
+      this.cache.clear();
+    }
+  }
+
+  async getCurrentPrice(symbol: string, forceRefresh = false): Promise<number> {
     try {
+      const cacheKey = `price_${symbol}`;
+      const cachedPrice = !forceRefresh ? this.getCachedData<number>(cacheKey) : null;
+      
+      if (cachedPrice !== null) {
+        return cachedPrice;
+      }
+
       const response = await fetch(
         `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${this.apiKey}`
       );
@@ -72,21 +107,25 @@ export class OptionsService {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
+      const currentPrice = data.c || 0; // Current price
       
-      return data.c || 0; // Current price
+      // Cache the result
+      this.setCachedData(cacheKey, currentPrice);
+      
+      return currentPrice;
     } catch (error) {
       console.error('Error fetching current price:', error);
       return 0;
     }
   }
 
-  async fetchOptionsData(symbol: string): Promise<{ options: OptionData[]; currentPrice: number; error?: string }> {
+  async fetchOptionsData(symbol: string, forceRefresh = false): Promise<{ options: OptionData[]; currentPrice: number; error?: string }> {
     try {
       const cacheKey = `options_${symbol}`;
-      const cachedData = this.cache.get(cacheKey);
+      const cachedData = !forceRefresh ? this.getCachedData<{ options: OptionData[]; currentPrice: number }>(cacheKey) : null;
       
-      if (cachedData && Date.now() - cachedData.timestamp < this.CACHE_DURATION) {
-        return cachedData.data;
+      if (cachedData !== null) {
+        return cachedData;
       }
 
       const response = await fetch(
@@ -107,7 +146,7 @@ export class OptionsService {
       const options = this.transformOptionsData(data.data, currentPrice);
 
       const result = { options, currentPrice };
-      this.cache.set(cacheKey, { timestamp: Date.now(), data: result });
+      this.setCachedData(cacheKey, result);
       
       return result;
     } catch (error) {
@@ -170,5 +209,31 @@ export class OptionsService {
           theta: option.theta
         }));
     });
+  }
+
+  // Get the timestamp when the data was last fetched
+  getLastFetchTime(symbol: string, dataType: 'price' | 'options'): Date | null {
+    const key = dataType === 'price' ? `price_${symbol}` : `options_${symbol}`;
+    const cachedData = this.cache.get(key);
+    
+    if (cachedData) {
+      return new Date(cachedData.timestamp);
+    }
+    
+    return null;
+  }
+
+  // Get time remaining until cache expiration in minutes
+  getCacheTimeRemaining(symbol: string, dataType: 'price' | 'options'): number | null {
+    const key = dataType === 'price' ? `price_${symbol}` : `options_${symbol}`;
+    const cachedData = this.cache.get(key);
+    
+    if (cachedData) {
+      const expirationTime = cachedData.timestamp + this.CACHE_DURATION;
+      const timeRemaining = Math.max(0, expirationTime - Date.now());
+      return Math.ceil(timeRemaining / 60000); // Convert to minutes
+    }
+    
+    return null;
   }
 } 

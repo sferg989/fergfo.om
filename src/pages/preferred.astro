@@ -1,6 +1,12 @@
 ---
+export const prerender = false;
+
 import Layout from '../layouts/Layout.astro';
 import PreferredStocksView from '../components/preferredStocksView.astro';
+
+// Check if we should force refresh the data
+const currentUrl = new URL(Astro.request.url);
+const shouldRefresh = currentUrl.searchParams.get('refresh') === 'true';
 ---
 
 <Layout title="Preferred Stocks Options">
@@ -15,24 +21,11 @@ import PreferredStocksView from '../components/preferredStocksView.astro';
       </a>
     </div>
 
-    <PreferredStocksView />
+    <PreferredStocksView forceRefresh={shouldRefresh} />
   </main>
 </Layout>
 
 <script>
-  let refreshInterval: ReturnType<typeof setInterval>;
-
-  function startAutoRefresh() {
-    refreshInterval = setInterval(() => {
-      window.location.reload();
-    }, 300000); // 5 minutes
-  }
-
-  startAutoRefresh();
-
-  window.addEventListener('unload', () => {
-    if (refreshInterval) {
-      clearInterval(refreshInterval);
-    }
-  });
+  // Remove auto-refresh logic as we've implemented manual refresh
+  // Users can now refresh data by clicking the refresh button
 </script>

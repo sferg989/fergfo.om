@@ -9,6 +9,7 @@ import HighestScoreOption from '../components/highest_score_option.astro';
 // Get the symbol from URL params with more robust handling
 const currentUrl = new URL(Astro.request.url);
 const symbol = currentUrl.searchParams.get('symbol')?.toUpperCase();
+const shouldRefresh = currentUrl.searchParams.get('refresh') === 'true';
 
 
 ---
@@ -30,7 +31,7 @@ const symbol = currentUrl.searchParams.get('symbol')?.toUpperCase();
 
     {symbol ? (
       <>
-        <OptionsTable symbol={symbol} />
+        <OptionsTable symbol={symbol} forceRefresh={shouldRefresh} />
       </>
     ) : (
       <div class="text-center p-8 bg-gray-50 rounded-lg">
@@ -124,25 +125,7 @@ const symbol = currentUrl.searchParams.get('symbol')?.toUpperCase();
 </style>
 
 <script>
-  let refreshInterval: ReturnType<typeof setInterval>;
-
-  function startAutoRefresh() {
-    refreshInterval = setInterval(() => {
-      const url = new URL(window.location.href);
-      const currentSymbol = url.searchParams.get('symbol');
-      if (currentSymbol) {
-        console.log('Auto-refreshing data for:', currentSymbol);
-        window.location.reload();
-      }
-    }, 60000); // 60 seconds
-  }
-
-  startAutoRefresh();
-
-  window.addEventListener('unload', () => {
-    if (refreshInterval) {
-      clearInterval(refreshInterval);
-    }
-  });
+  // Remove auto-refresh logic as we've implemented manual refresh
+  // Users can now refresh data by clicking the refresh button
 </script>
 
