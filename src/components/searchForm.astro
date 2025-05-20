@@ -168,6 +168,7 @@ const preferredStocksList = Object.values(PreferredStocks);
     const target = e.target as HTMLSelectElement;
     if (target.value) {
       input.value = target.value;
+      form?.dispatchEvent(new Event('submit'));
     }
   });
 
