@@ -8,6 +8,8 @@ const optionsService = OptionsService.getInstance();
 const preferredStocksData = await Promise.all(
   Object.values(PreferredStocks).map(async (symbol) => {
     const { options, currentPrice, error } = await optionsService.fetchOptionsData(symbol);
+    console.log('symbol', symbol);
+
     return { symbol, options, currentPrice, error };
   })
 );

@@ -142,7 +142,7 @@ export class OptionsService {
       
     })
 
-    console.log(rightdata);
+    
     
     return data.flatMap(dateGroup => {
       if (!dateGroup.options?.PUT) return [];

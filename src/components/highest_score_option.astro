@@ -1,0 +1,130 @@
+---
+import type { OptionData } from '../utils/optionsUtils';
+import { OptionScorer } from '../utils/optionScorer';
+import '../styles/optionsTable.css';
+
+interface Props {
+  options: OptionData[];
+  currentPrice: number;
+  symbol: string;
+}
+
+const { options, currentPrice, symbol } = Astro.props;
+
+// Find the highest scoring option
+let highestScore = 0;
+let highestScoreOption: OptionData | null = null;
+
+options.forEach((option) => {
+  const score = OptionScorer.calculateScore(option, currentPrice);
+  if (score.total > highestScore) {
+    highestScore = score.total;
+    highestScoreOption = option;
+  }
+});
+
+// Calculate details for the highest scoring option
+let premiumPct = 0;
+let annualizedPremiumPct = 0;
+let daysToExpiry = 0;
+let scoreClass = '';
+
+if (highestScoreOption) {
+  // Add type assertion to help TypeScript
+  const option = highestScoreOption as OptionData;
+  const expiryDate = new Date(option.expirationDate);
+  const today = new Date();
+  daysToExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+  premiumPct = (option.bid / option.strike) * 100;
+  annualizedPremiumPct = (premiumPct * 365) / daysToExpiry;
+
+  scoreClass = OptionScorer.getScoreClass(highestScore);
+}
+---
+
+{highestScoreOption && (
+  <div class="highest-score-option mb-6">
+    <h2 class="text-xl font-bold mb-3">🏆 Highest Score Option for {symbol}</h2>
+    <div class="bg-white p-4 rounded-lg shadow-md border-l-4 border-green-500">
+      <div class="flex justify-between items-center mb-3">
+        <div class="flex items-center gap-2">
+          <span class={`score-badge ${scoreClass}`}>{highestScore.toFixed(1)}</span>
+          <span class="text-lg font-bold">${(highestScoreOption as OptionData).strike} Strike</span>
+          <span class="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
+            {new Date((highestScoreOption as OptionData).expirationDate).toLocaleDateString()} ({daysToExpiry} days)
+          </span>
+        </div>
+        <div class="text-right">
+          <div class="text-green-700 font-semibold">${(highestScoreOption as OptionData).bid} premium</div>
+          <div class="text-xs text-gray-600">
+            {premiumPct.toFixed(2)}% premium ({annualizedPremiumPct.toFixed(2)}% ann.)
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-4 gap-4 text-sm">
+        <div>
+          <span class="text-gray-600">Volume:</span>
+          <span class="font-medium">{(highestScoreOption as OptionData).volume || 'N/A'}</span>
+        </div>
+        <div>
+          <span class="text-gray-600">Open Interest:</span>
+          <span class="font-medium">{(highestScoreOption as OptionData).openInterest || 'N/A'}</span>
+        </div>
+        <div>
+          <span class="text-gray-600">IV:</span>
+          <span class="font-medium">{(highestScoreOption as OptionData).impliedVolatility ?
+            ((highestScoreOption as OptionData).impliedVolatility * 100).toFixed(2) + '%' : 'N/A'}</span>
+        </div>
+        <div>
+          <span class="text-gray-600">Theta:</span>
+          <span class="font-medium">{(highestScoreOption as OptionData).theta?.toFixed(4) || 'N/A'}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
+<style>
+  .highest-score-option {
+    animation: highlight-pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes highlight-pulse {
+    0%, 100% { box-shadow: 0 0 0 rgba(16, 185, 129, 0); }
+    50% { box-shadow: 0 0 10px rgba(16, 185, 129, 0.3); }
+  }
+
+  .score-badge {
+    display: inline-block;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    color: white;
+  }
+
+  .score-excellent {
+    background: linear-gradient(45deg, #10b981, #059669);
+  }
+
+  .score-good {
+    background: linear-gradient(45deg, #3b82f6, #2563eb);
+  }
+
+  .score-moderate {
+    background: linear-gradient(45deg, #f59e0b, #d97706);
+  }
+
+  .score-weak {
+    background: linear-gradient(45deg, #f97316, #ea580c);
+  }
+
+  .score-poor {
+    background: linear-gradient(45deg, #ef4444, #dc2626);
+  }
+</style>

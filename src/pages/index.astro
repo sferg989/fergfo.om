@@ -4,6 +4,7 @@ export const prerender = false;
 import Layout from '../layouts/Layout.astro';
 import OptionsTable from '../components/OptionsTable.astro';
 import SearchForm from '../components/searchForm.astro';
+import HighestScoreOption from '../components/highest_score_option.astro';
 
 // Get the symbol from URL params with more robust handling
 const currentUrl = new URL(Astro.request.url);
@@ -28,7 +29,9 @@ const symbol = currentUrl.searchParams.get('symbol')?.toUpperCase();
     </div>
 
     {symbol ? (
-      <OptionsTable symbol={symbol} />
+      <>
+        <OptionsTable symbol={symbol} />
+      </>
     ) : (
       <div class="text-center p-8 bg-gray-50 rounded-lg">
         <p class="text-gray-600">Enter a stock symbol to view options data</p>
