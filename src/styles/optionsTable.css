@@ -1,33 +1,85 @@
+/* Options table main styling */
 .options-table {
   width: 100%;
-  border-collapse: collapse;
-  background: white;
-  border: 1px solid #e2e8f0;
+  border-collapse: separate;
+  border-spacing: 0;
+  background-color: white;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  margin-bottom: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   font-size: 0.875rem;
 }
 
-th, td {
-  padding: 0.5rem;
-  text-align: right;
-  border-bottom: 1px solid #e2e8f0;
-  white-space: nowrap;
-}
-
-th:first-child, td:first-child {
-  text-align: left;
-}
-
-th {
-  background: #f7fafc;
+.options-table thead th {
+  background-color: #f1f5f9;
+  color: #475569;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.75rem 1rem;
+  text-align: center;
+  border-bottom: 2px solid #e2e8f0;
   position: sticky;
   top: 0;
 }
 
-tr:hover {
-  background: #f8fafc;
+.options-table tbody tr {
+  border-bottom: 1px solid #e2e8f0;
+  transition: background-color 0.2s;
 }
 
-tr:nth-child(even) {
-  background: #fafafa;
+.options-table tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+.options-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.options-table tbody td {
+  padding: 0.75rem 1rem;
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* Column-specific styling */
+.options-table td:nth-child(1) {
+  font-weight: 600;
+  border-right: 1px solid #f1f5f9;
+}
+
+.options-table td:nth-child(2),
+.options-table td:nth-child(3) {
+  font-variant-numeric: tabular-nums;
+}
+
+.options-table td:nth-child(3),
+.options-table td:nth-child(4),
+.options-table td:nth-child(5) {
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+
+.options-table td:nth-child(9),
+.options-table td:nth-child(10) {
+  font-weight: 600;
+  color: #1e40af;
+}
+
+/* Zebra striping for better readability */
+.options-table tbody tr:nth-child(even) {
+  background-color: #f9fafb;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .options-table {
+    font-size: 0.75rem;
+  }
+  
+  .options-table thead th,
+  .options-table tbody td {
+    padding: 0.5rem;
+  }
 } 

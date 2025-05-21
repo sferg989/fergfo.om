@@ -1,3 +1,5 @@
+import type { OptionScore } from '../types/option';
+
 export enum ScoreWeight {
   PREMIUM = 40,  // Premium has highest weight as it directly impacts returns
   THETA = 30,    // Theta is second most important for consistent time decay
@@ -5,13 +7,7 @@ export enum ScoreWeight {
   DTE = 15       // Days till expiration impacts time management
 }
 
-export interface OptionScore {
-  total: number;
-  premiumScore: number;
-  thetaScore: number;
-  strikeScore: number;
-  dteScore: number;
-}
+export type ScoreClass = 'score-excellent' | 'score-good' | 'score-moderate' | 'score-weak' | 'score-poor';
 
 export class OptionScorer {
   /**

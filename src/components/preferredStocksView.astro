@@ -1,8 +1,9 @@
 ---
 import { PreferredStocks } from '../enums/preferredStocks';
 import { OptionsService } from '../services/optionsService';
-import HighScoreOptions from './highScoreOptions.astro';
 import { ScoreThresholds } from '../enums/scoreThresholds';
+import type { StockOptionsData } from '../types/option';
+import '../styles/optionsTable.css';
 
 interface Props {
   forceRefresh?: boolean;
@@ -10,27 +11,13 @@ interface Props {
 
 const { forceRefresh = false } = Astro.props;
 const optionsService = OptionsService.getInstance();
-const preferredStocksData = await Promise.all(
-  Object.values(PreferredStocks).map(async (symbol) => {
-    const { options, currentPrice, error } = await optionsService.fetchOptionsData(symbol, forceRefresh);
-    const lastFetchTime = optionsService.getLastFetchTime(symbol, 'options');
-    const cacheTimeRemaining = optionsService.getCacheTimeRemaining(symbol, 'options');
-
-    return {
-      symbol,
-      options,
-      currentPrice,
-      error,
-      lastFetchTime,
-      cacheTimeRemaining
-    };
-  })
-);
+// Instead of fetching all at once, we'll just get the symbols ready
+const symbols = Object.values(PreferredStocks);
 ---
 
 <div class="preferred-stocks-container">
   <div class="flex justify-between items-center mb-6">
-    <h1 class="text-2xl font-bold">Preferred Stocks High Score Options</h1>
+    <h1 class="text-2xl font-bold">Preferred Stocks Top Scoring Options</h1>
     <form method="get">
       <input type="hidden" name="refresh" value="true" />
       <button type="submit" class="refresh-button px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors">
@@ -39,37 +26,52 @@ const preferredStocksData = await Promise.all(
     </form>
   </div>
 
-  <div class="grid gap-8">
-    {preferredStocksData.map(({ symbol, options, currentPrice, error, lastFetchTime, cacheTimeRemaining }) => (
-      <div class="stock-section">
+  <div class="grid gap-8" id="stocks-container">
+    {symbols.map((symbol) => (
+      <div class="stock-section" id={`stock-${symbol}`}>
         <div class="flex justify-between items-center mb-3">
           <h2 class="text-xl font-semibold text-blue-600">{symbol}</h2>
-          <div class="text-xs text-gray-500">
-            {lastFetchTime && (
-              <>
-                Last updated: {lastFetchTime.toLocaleTimeString()}
-                {cacheTimeRemaining !== null && (
-                  <span> (Refreshes in {cacheTimeRemaining} min)</span>
-                )}
-              </>
-            )}
+          <div class="text-xs text-gray-500" id={`status-${symbol}`}>
+            <span class="loading-indicator">Loading...</span>
           </div>
         </div>
-        {error ? (
-          <div class="error-message p-4 bg-red-50 text-red-700 rounded">
-            {error}
+        <div class="p-4 bg-gray-50 rounded text-center" id={`content-${symbol}`}>
+          <div class="animate-pulse flex space-x-4 items-center justify-center">
+            <div class="rounded-full bg-slate-200 h-10 w-10"></div>
+            <div class="flex-1 space-y-6 py-1 max-w-md">
+              <div class="h-2 bg-slate-200 rounded"></div>
+              <div class="space-y-3">
+                <div class="grid grid-cols-3 gap-4">
+                  <div class="h-2 bg-slate-200 rounded col-span-2"></div>
+                  <div class="h-2 bg-slate-200 rounded col-span-1"></div>
+                </div>
+                <div class="h-2 bg-slate-200 rounded"></div>
+              </div>
+            </div>
           </div>
-        ) : (
-          <HighScoreOptions
-            options={options}
-            currentPrice={currentPrice}
-            minScore={ScoreThresholds.PREFERRED}
-          />
-        )}
+        </div>
       </div>
     ))}
   </div>
 </div>
+
+<script>
+  import { fetchStocksSequentially } from '../components/options_fetcher';
+
+  // Get the symbols from the page
+  const symbols = Array.from(document.querySelectorAll<HTMLElement>('.stock-section')).map(
+    el => el.id.replace('stock-', '')
+  );
+
+  // Get forceRefresh from URL
+  const urlParams = new URLSearchParams(window.location.search);
+  const forceRefresh = urlParams.get('refresh') === 'true';
+
+  // Start fetching when the page loads
+  document.addEventListener('DOMContentLoaded', () => {
+    fetchStocksSequentially(symbols, forceRefresh);
+  });
+</script>
 
 <style>
   .preferred-stocks-container {
@@ -83,5 +85,46 @@ const preferredStocksData = await Promise.all(
     border-radius: 0.5rem;
     padding: 1rem;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .loading-indicator {
+    color: #6b7280;
+    font-style: italic;
+  }
+
+  /* We've moved the primary table styling to optionsTable.css */
+  /* Additional styling specific to this component */
+  :global(.high-score-section) {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid #e9ecef;
+  }
+
+  /* Score cell styles */
+  :global(.score-excellent) {
+    background-color: #dcfce7 !important;
+    font-weight: bold;
+    color: #166534;
+  }
+
+  :global(.score-good) {
+    background-color: #d1fae5 !important;
+    color: #047857;
+  }
+
+  :global(.score-moderate) {
+    background-color: #ecfdf5 !important;
+    color: #0f766e;
+  }
+
+  :global(.score-weak) {
+    background-color: #f0f9ff !important;
+    color: #0369a1;
+  }
+
+  :global(.score-poor) {
+    background-color: #f9fafb !important;
+    color: #4b5563;
   }
 </style>
