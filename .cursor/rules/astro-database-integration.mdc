@@ -1,0 +1,82 @@
+---
+globs: *.astro
+description: Astro D1 database integration patterns and best practices
+---
+
+# Astro D1 Database Integration
+
+## Database Access Pattern
+
+Always follow this pattern for accessing D1 database in Astro components:
+
+```astro
+---
+import { DatabaseService } from '../services/database_service';
+
+// Standard D1 database access pattern
+const db = (Astro.locals.runtime?.env?.DB as D1Database) || null;
+
+let data: { results: any[]; error?: string } = { results: [] };
+
+if (db) {
+  try {
+    const dbService = DatabaseService.getInstance(db);
+    const results = await dbService.getData();
+    data = { results };
+  } catch (err) {
+    console.error('Database error:', err);
+    data = { results: [], error: err instanceof Error ? err.message : 'Database error' };
+  }
+} else {
+  console.warn('Database not available in runtime');
+  data = { results: [], error: 'Database not available' };
+}
+---
+```
+
+## Key Principles
+
+- **Always check for db availability**: Database may not be available in all environments
+- **Use proper error handling**: Wrap database calls in try-catch blocks
+- **Log errors appropriately**: Console.error for debugging, user-friendly messages for UI
+- **Provide fallbacks**: Handle cases where database is unavailable gracefully
+- **Type safety**: Cast database connection with proper TypeScript types
+
+## Service Layer Pattern
+
+- Use service classes (like `OptionsService`, `DatabaseService`) to encapsulate database logic
+- Pass database connection to service instances
+- Keep database queries out of component frontmatter - delegate to services
+
+## Error Handling Strategy
+
+```astro
+---
+// Individual try-catch for each operation
+let snapshotsData: { snapshots: any[]; error?: string } = { snapshots: [] };
+let performanceData: { data: any[]; error?: string } = { data: [] };
+
+if (db) {
+  try {
+    const service = SomeService.getInstance(db);
+    
+    // Separate error handling for each operation
+    try {
+      const snapshots = await service.getSnapshots();
+      snapshotsData = { snapshots };
+    } catch (err) {
+      snapshotsData = { snapshots: [], error: err instanceof Error ? err.message : 'Snapshots error' };
+    }
+    
+    try {
+      const performance = await service.getPerformance();
+      performanceData = { data: performance };
+    } catch (err) {
+      performanceData = { data: [], error: err instanceof Error ? err.message : 'Performance error' };
+    }
+  } catch (err) {
+    console.error('Service initialization error:', err);
+  }
+}
+---
+```

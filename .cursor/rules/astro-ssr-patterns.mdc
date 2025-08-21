@@ -1,0 +1,63 @@
+---
+globs: *.astro
+description: Astro server-side rendering best practices and patterns
+---
+
+# Astro SSR Best Practices
+
+## Prefer Server-Side Rendering Over Client-Side
+
+- **Always prefer SSR**: Use Astro frontmatter for data fetching instead of client-side JavaScript when possible
+- **Move API calls to frontmatter**: Fetch data during build/server time rather than in `<script>` tags
+- **Eliminate loading states**: Server-rendered content appears immediately without spinners or skeleton screens
+- **Improve SEO**: Search engines can index server-rendered content
+
+## Example Pattern
+
+```astro
+---
+// ✅ GOOD: Server-side data fetching
+import { SomeService } from '../services/someService';
+
+const db = (Astro.locals.runtime?.env?.DB as D1Database) || null;
+let data: { items: any[]; error?: string } = { items: [] };
+
+if (db) {
+  try {
+    const service = SomeService.getInstance(db);
+    const items = await service.fetchData();
+    data = { items };
+  } catch (err) {
+    data = { items: [], error: err instanceof Error ? err.message : 'Unknown error' };
+  }
+}
+---
+
+<div>
+  {data.error ? (
+    <p class="text-red-500">Error: {data.error}</p>
+  ) : data.items.length > 0 ? (
+    <div>
+      {data.items.map((item) => (
+        <div>{item.name}</div>
+      ))}
+    </div>
+  ) : (
+    <p>No data available</p>
+  )}
+</div>
+
+<!-- ❌ AVOID: Client-side fetching for initial data -->
+<!-- <script>
+  fetch('/api/data').then(response => {
+    // Don't do this for initial page data
+  });
+</script> -->
+```
+
+## When to Use Client-Side JavaScript
+
+- **Interactive features**: User interactions, form submissions, dynamic updates
+- **Real-time updates**: WebSocket connections, polling for live data
+- **Progressive enhancement**: Adding interactivity to server-rendered content
+- **Client-only APIs**: Browser APIs like geolocation, camera, etc.

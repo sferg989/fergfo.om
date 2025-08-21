@@ -1,0 +1,174 @@
+---
+globs: *.astro
+description: Error handling patterns and best practices for Astro components
+---
+
+# Astro Error Handling Patterns
+
+## Frontmatter Error Handling
+
+### Individual Operation Error Handling
+Wrap each async operation in its own try-catch to isolate failures:
+
+```astro
+---
+let userData: { user: any; error?: string } = { user: null };
+let postsData: { posts: any[]; error?: string } = { posts: [] };
+let commentsData: { comments: any[]; error?: string } = { comments: [] };
+
+if (db) {
+  try {
+    const service = DataService.getInstance(db);
+    
+    // Each operation isolated
+    try {
+      const user = await service.getUser(userId);
+      userData = { user };
+    } catch (err) {
+      console.error('Error fetching user:', err);
+      userData = { user: null, error: err instanceof Error ? err.message : 'User error' };
+    }
+    
+    try {
+      const posts = await service.getPosts(userId);
+      postsData = { posts };
+    } catch (err) {
+      console.error('Error fetching posts:', err);
+      postsData = { posts: [], error: err instanceof Error ? err.message : 'Posts error' };
+    }
+    
+    try {
+      const comments = await service.getComments(userId);
+      commentsData = { comments };
+    } catch (err) {
+      console.error('Error fetching comments:', err);
+      commentsData = { comments: [], error: err instanceof Error ? err.message : 'Comments error' };
+    }
+    
+  } catch (err) {
+    console.error('Service initialization error:', err);
+  }
+}
+---
+```
+
+## Template Error Display
+
+### Consistent Error UI Pattern
+```astro
+<div class="section">
+  {data.error ? (
+    <p class="text-red-500">Error: {data.error}</p>
+  ) : data.items.length > 0 ? (
+    <div>
+      {data.items.map((item) => (
+        <div class="item">{item.name}</div>
+      ))}
+    </div>
+  ) : (
+    <p class="text-gray-500">No data available</p>
+  )}
+</div>
+```
+
+### Error State Classes
+Use consistent Tailwind classes for error states:
+- `text-red-500` for error messages
+- `text-gray-500` for empty states
+- `text-yellow-600` for warning states
+
+## Error Logging Strategy
+
+### Server-Side Logging
+```astro
+---
+try {
+  const result = await service.fetchData();
+  data = { result };
+} catch (err) {
+  // Log detailed error for debugging
+  console.error('Detailed error context:', {
+    error: err,
+    symbol,
+    timestamp: new Date().toISOString(),
+    operation: 'fetchData'
+  });
+  
+  // Provide user-friendly error message
+  const userMessage = err instanceof Error ? err.message : 'Unable to load data';
+  data = { result: null, error: userMessage };
+}
+---
+```
+
+## Database Error Handling
+
+### Connection Availability
+```astro
+---
+const db = (Astro.locals.runtime?.env?.DB as D1Database) || null;
+
+if (!db) {
+  console.warn('Database not available in current environment');
+  data = { items: [], error: 'Database not available' };
+} else {
+  // Proceed with database operations
+}
+---
+```
+
+### Service Layer Error Propagation
+```astro
+---
+try {
+  const service = OptionsService.getInstance(db);
+  const result = await service.fetchData(symbol);
+  data = { result };
+} catch (err) {
+  if (err instanceof Error) {
+    // Different handling based on error type
+    if (err.message.includes('rate limit')) {
+      data = { result: null, error: 'API rate limit exceeded. Please try again later.' };
+    } else if (err.message.includes('not found')) {
+      data = { result: null, error: `Symbol ${symbol} not found.` };
+    } else {
+      data = { result: null, error: 'Unable to fetch data. Please try again.' };
+    }
+  } else {
+    data = { result: null, error: 'An unexpected error occurred.' };
+  }
+}
+---
+```
+
+## Error Recovery Patterns
+
+### Graceful Degradation
+```astro
+---
+// Primary data source
+let primaryData: { items: any[]; error?: string } = { items: [] };
+// Fallback data source
+let fallbackData: { items: any[]; error?: string } = { items: [] };
+
+try {
+  const primary = await service.getPrimaryData();
+  primaryData = { items: primary };
+} catch (err) {
+  console.error('Primary data source failed:', err);
+  primaryData = { items: [], error: 'Primary source unavailable' };
+  
+  // Try fallback
+  try {
+    const fallback = await service.getFallbackData();
+    fallbackData = { items: fallback };
+  } catch (fallbackErr) {
+    console.error('Fallback data source failed:', fallbackErr);
+    fallbackData = { items: [], error: 'All data sources unavailable' };
+  }
+}
+
+// Use the best available data
+const displayData = primaryData.items.length > 0 ? primaryData : fallbackData;
+---
+```

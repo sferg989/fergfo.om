@@ -1,0 +1,196 @@
+---
+globs: *.astro
+description: Performance optimization patterns for Astro applications
+---
+
+# Astro Performance Patterns
+
+## Server-Side vs Client-Side Decision Matrix
+
+### ✅ Use Server-Side Rendering (SSR) For:
+- **Initial page data**: Historical data, user profiles, product listings
+- **SEO-critical content**: Meta information, structured data, primary content
+- **Static or slow-changing data**: Configuration, settings, reference data
+- **Database queries**: Direct database access for initial data load
+- **API aggregation**: Combining multiple API calls into single server request
+
+### ✅ Use Client-Side Rendering (CSR) For:
+- **Real-time updates**: Live chat, stock prices, notification feeds
+- **User interactions**: Form validation, interactive filters, dynamic searches
+- **Progressive enhancement**: Adding interactivity to server-rendered content
+- **Client-only APIs**: Geolocation, camera, local storage, WebRTC
+- **Infinite scroll/pagination**: Loading additional content on demand
+
+## Performance Optimization Patterns
+
+### Data Prefetching in Frontmatter
+```astro
+---
+// ✅ GOOD: Aggregate multiple API calls server-side
+const [userData, postsData, commentsData] = await Promise.allSettled([
+  userService.getUser(userId),
+  postService.getPosts(userId),
+  commentService.getComments(userId)
+]);
+
+// Transform results with error handling
+const user = userData.status === 'fulfilled' ? userData.value : null;
+const posts = postsData.status === 'fulfilled' ? postsData.value : [];
+const comments = commentsData.status === 'fulfilled' ? commentsData.value : [];
+---
+
+<!-- ❌ AVOID: Multiple client-side API calls -->
+<!-- <script>
+  Promise.all([
+    fetch('/api/user'),
+    fetch('/api/posts'),
+    fetch('/api/comments')
+  ]).then(...)
+</script> -->
+```
+
+### Conditional Loading Strategies
+```astro
+---
+interface Props {
+  priority: 'high' | 'low';
+  symbol: string;
+}
+
+const { priority, symbol } = Astro.props;
+
+// Load expensive data only for high-priority requests
+let expensiveData: any = null;
+if (priority === 'high') {
+  try {
+    expensiveData = await expensiveService.getDetailedAnalysis(symbol);
+  } catch (err) {
+    console.error('Failed to load detailed analysis:', err);
+  }
+}
+
+// Always load basic data
+const basicData = await basicService.getQuickData(symbol);
+---
+
+<div>
+  <!-- Always show basic data -->
+  <BasicDataDisplay data={basicData} />
+  
+  <!-- Conditionally show expensive data -->
+  {expensiveData && (
+    <DetailedAnalysis data={expensiveData} />
+  )}
+  
+  <!-- Client-side enhancement for low priority -->
+  {priority === 'low' && (
+    <button id="load-details" data-symbol={symbol}>
+      Load Detailed Analysis
+    </button>
+  )}
+</div>
+
+{priority === 'low' && (
+  <script>
+    document.getElementById('load-details')?.addEventListener('click', async (e) => {
+      const symbol = e.target.dataset.symbol;
+      const response = await fetch(`/api/detailed-analysis?symbol=${symbol}`);
+      // Handle client-side loading for low priority
+    });
+  </script>
+)}
+```
+
+### Caching Strategies
+```astro
+---
+// Use service-level caching for expensive operations
+const cacheKey = `analysis_${symbol}_${new Date().toDateString()}`;
+
+let analysisData: any;
+try {
+  // Check cache first
+  analysisData = await cacheService.get(cacheKey);
+  
+  if (!analysisData) {
+    // Compute and cache
+    analysisData = await expensiveAnalysisService.analyze(symbol);
+    await cacheService.set(cacheKey, analysisData, 3600); // 1 hour cache
+  }
+} catch (err) {
+  console.error('Analysis cache error:', err);
+  analysisData = null;
+}
+---
+```
+
+## Bundle Size Optimization
+
+### Minimal Client-Side JavaScript
+```astro
+<!-- ✅ GOOD: Minimal client enhancement -->
+<button id="toggle-details" data-expanded="false">
+  Show Details
+</button>
+
+<div id="details" class="hidden">
+  <!-- Server-rendered content -->
+</div>
+
+<script>
+  // Simple DOM manipulation only
+  document.getElementById('toggle-details')?.addEventListener('click', (e) => {
+    const details = document.getElementById('details');
+    const expanded = e.target.dataset.expanded === 'true';
+    
+    details?.classList.toggle('hidden', expanded);
+    e.target.dataset.expanded = (!expanded).toString();
+    e.target.textContent = expanded ? 'Show Details' : 'Hide Details';
+  });
+</script>
+
+<!-- ❌ AVOID: Heavy client-side frameworks for simple interactions -->
+```
+
+### Lazy Loading with client:visible
+```astro
+---
+// Heavy component that should load only when visible
+import HeavyChart from './heavy_chart.astro';
+---
+
+<div>
+  <!-- Critical above-the-fold content renders immediately -->
+  <CriticalContent />
+  
+  <!-- Heavy component loads only when scrolled into view -->
+  <HeavyChart client:visible />
+</div>
+```
+
+## Database Query Optimization
+
+### Efficient Data Loading
+```astro
+---
+// ✅ GOOD: Single optimized query
+const combinedData = await db.prepare(`
+  SELECT 
+    s.symbol, s.current_price,
+    COUNT(o.id) as option_count,
+    MAX(score.total_score) as max_score
+  FROM stock_snapshots s
+  LEFT JOIN option_snapshots o ON s.id = o.snapshot_id
+  LEFT JOIN option_score_snapshots score ON o.id = score.option_snapshot_id
+  WHERE s.symbol = ? AND s.created_at >= ?
+  GROUP BY s.id
+  ORDER BY s.created_at DESC
+  LIMIT 10
+`).bind(symbol, cutoffDate).all();
+
+// ❌ AVOID: Multiple separate queries
+// const stocks = await getStocks(symbol);
+// const options = await getOptions(stockId);
+// const scores = await getScores(optionId);
+---
+```

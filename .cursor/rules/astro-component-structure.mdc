@@ -1,0 +1,119 @@
+---
+globs: *.astro
+description: Astro component structure and organization best practices
+---
+
+# Astro Component Structure
+
+## Standard Component Structure
+
+Follow this order for Astro component sections:
+
+```astro
+---
+// 1. Imports first
+import { SomeService } from '../services/someService';
+import type { ComponentProps } from '../types/component';
+
+// 2. Interface definitions
+interface Props {
+  symbol: string;
+  forceRefresh?: boolean;
+}
+
+// 3. Props destructuring
+const { symbol, forceRefresh = false } = Astro.props;
+
+// 4. Runtime/environment setup
+const db = (Astro.locals.runtime?.env?.DB as D1Database) || null;
+
+// 5. Data fetching and business logic
+let data: { items: any[]; error?: string } = { items: [] };
+
+if (db) {
+  try {
+    const service = SomeService.getInstance(db);
+    const items = await service.fetchData(symbol, forceRefresh);
+    data = { items };
+  } catch (err) {
+    data = { items: [], error: err instanceof Error ? err.message : 'Error' };
+  }
+}
+---
+
+<!-- 6. HTML template -->
+<div class="component-container">
+  <!-- Component content here -->
+</div>
+
+<!-- 7. Scoped styles -->
+<style>
+  .component-container {
+    /* Styles here */
+  }
+</style>
+
+<!-- 8. Client-side scripts (only when necessary) -->
+<script>
+  // Minimal client-side enhancement only
+</script>
+```
+
+## Component Best Practices
+
+### Props Interface
+- Always define a `Props` interface for type safety
+- Use optional properties with defaults where appropriate
+- Keep props simple and focused
+
+### Data Structure
+- Use consistent data structure pattern: `{ items: any[]; error?: string }`
+- Separate concerns: one data object per logical data source
+- Always include error states
+
+### Template Patterns
+- Use conditional rendering with ternary operators
+- Provide meaningful fallbacks for empty states
+- Keep templates readable with proper indentation
+
+### Error Handling in Templates
+```astro
+<div>
+  {data.error ? (
+    <p class="text-red-500">Error: {data.error}</p>
+  ) : data.items.length > 0 ? (
+    <div>
+      {data.items.map((item) => (
+        <div class="item">{item.name}</div>
+      ))}
+    </div>
+  ) : (
+    <p class="text-gray-500">No data available</p>
+  )}
+</div>
+```
+
+## File Naming
+- Use snake_case for component files (following project convention)
+- Be descriptive: `historical_data_view.astro` not `history.astro`
+- Group related components in appropriate directories
+
+## Import Organization
+```astro
+---
+// 1. External libraries
+import { z } from 'zod';
+
+// 2. Internal services
+import { OptionsService } from '../services/optionsService';
+
+// 3. Internal utilities
+import { formatDate } from '../utils/dateUtils';
+
+// 4. Internal components
+import SearchForm from './searchForm.astro';
+
+// 5. Types (last)
+import type { OptionData } from '../types/option';
+---
+```
