@@ -56,20 +56,36 @@ const symbols = Object.values(PreferredStocks);
 </div>
 
 <script>
-  import { fetchStocksSequentially } from '../components/options_fetcher';
+  // Polyfill for global in browser environment
+  if (typeof global === 'undefined') {
+    window.global = window;
+  }
 
-  // Get the symbols from the page
-  const symbols = Array.from(document.querySelectorAll<HTMLElement>('.stock-section')).map(
-    el => el.id.replace('stock-', '')
-  );
+  // Dynamic import to avoid issues with SSR
+  document.addEventListener('DOMContentLoaded', async () => {
+    try {
+      const { fetchStocksSequentially } = await import('../components/options_fetcher');
 
-  // Get forceRefresh from URL
-  const urlParams = new URLSearchParams(window.location.search);
-  const forceRefresh = urlParams.get('refresh') === 'true';
+      // Get the symbols from the page
+      const symbols = Array.from(document.querySelectorAll<HTMLElement>('.stock-section')).map(
+        el => el.id.replace('stock-', '')
+      );
 
-  // Start fetching when the page loads
-  document.addEventListener('DOMContentLoaded', () => {
-    fetchStocksSequentially(symbols, forceRefresh);
+      // Get forceRefresh from URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const forceRefresh = urlParams.get('refresh') === 'true';
+
+      // Start fetching
+      await fetchStocksSequentially(symbols, forceRefresh);
+    } catch (error) {
+      console.error('Error loading or executing fetchStocksSequentially:', error);
+
+      // Show error message to users
+      document.querySelectorAll<HTMLElement>('.loading-indicator').forEach(indicator => {
+        indicator.textContent = 'Error loading data';
+        indicator.style.color = 'red';
+      });
+    }
   });
 </script>
 

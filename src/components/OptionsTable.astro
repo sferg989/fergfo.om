@@ -11,7 +11,10 @@ interface Props {
 }
 
 const { symbol, forceRefresh = false } = Astro.props;
-const optionsService = OptionsService.getInstance();
+
+// Get D1 database from runtime if available
+const db = (Astro.locals.runtime?.env?.DB as D1Database) || null;
+const optionsService = OptionsService.getInstance(db);
 const { options, currentPrice, error } = await optionsService.fetchOptionsData(symbol, forceRefresh);
 
 // Get cache information

@@ -87,7 +87,7 @@ const preferredStocksList = Object.values(PreferredStocks);
 
 <style>
   input:invalid {
-    @apply border-red-200;
+    border-color: rgb(254 202 202); /* red-200 */
     background: linear-gradient(
       to bottom right,
       rgba(255, 255, 255, 0.9),
@@ -96,7 +96,8 @@ const preferredStocksList = Object.values(PreferredStocks);
   }
 
   input:invalid:focus {
-    @apply border-red-400 ring-red-100;
+    border-color: rgb(248 113 113); /* red-400 */
+    box-shadow: 0 0 0 3px rgba(254, 226, 226, 0.8); /* ring-red-100 */
   }
 
   .form-group {
@@ -157,7 +158,7 @@ const preferredStocksList = Object.values(PreferredStocks);
 <script>
   const form = document.getElementById('symbolForm');
   const input = document.getElementById('symbol') as HTMLInputElement;
-  const select = document.getElementById('preferredStockSelect') as HTMLSelectElement;
+  const select = document.getElementById('preferredStockSelect') as HTMLSelectElement | null;
 
   input?.addEventListener('input', (e) => {
     const target = e.target as HTMLInputElement;

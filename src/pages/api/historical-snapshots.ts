@@ -1,11 +1,10 @@
 import type { APIRoute } from 'astro';
 import { OptionsService } from '../../services/optionsService';
-import type { StockOptionsData } from '../../types/option';
 
 export const GET: APIRoute = async ({ request, locals }) => {
   const url = new URL(request.url);
   const symbol = url.searchParams.get('symbol');
-  const forceRefresh = url.searchParams.get('forceRefresh') === 'true';
+  const limit = parseInt(url.searchParams.get('limit') || '10', 10);
   
   if (!symbol) {
     return new Response(
@@ -17,27 +16,27 @@ export const GET: APIRoute = async ({ request, locals }) => {
   try {
     // Get D1 database from runtime
     const db = (locals.runtime?.env?.DB as D1Database) || null;
+    
+    if (!db) {
+      return new Response(
+        JSON.stringify({ error: 'Database not available' }),
+        { status: 503, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    
     const optionsService = OptionsService.getInstance(db);
-    
-    const { options, currentPrice, error } = await optionsService.fetchOptionsData(symbol, forceRefresh);
-    const lastFetchTime = optionsService.getLastFetchTime(symbol, 'options');
-    const cacheTimeRemaining = optionsService.getCacheTimeRemaining(symbol, 'options');
-    
-    const responseData: StockOptionsData = {
-      symbol,
-      options,
-      currentPrice,
-      error,
-      lastFetchTime: lastFetchTime ? lastFetchTime.toISOString() : null,
-      cacheTimeRemaining
-    };
+    const snapshots = await optionsService.getHistoricalSnapshots(symbol, limit);
     
     return new Response(
-      JSON.stringify(responseData),
+      JSON.stringify({ 
+        symbol: symbol.toUpperCase(),
+        snapshots,
+        count: snapshots.length
+      }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
   } catch (err) {
-    console.error(`Error fetching data for ${symbol}:`, err);
+    console.error(`Error fetching historical snapshots for ${symbol}:`, err);
     return new Response(
       JSON.stringify({ 
         error: err instanceof Error ? err.message : 'Unknown error occurred'
@@ -45,4 +44,4 @@ export const GET: APIRoute = async ({ request, locals }) => {
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
-}; 
+};

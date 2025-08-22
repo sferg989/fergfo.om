@@ -1,11 +1,12 @@
 import type { OptionScore } from '../types/option';
 
-export enum ScoreWeight {
-  PREMIUM = 40,  // Premium has highest weight as it directly impacts returns
-  THETA = 30,    // Theta is second most important for consistent time decay
-  STRIKE = 15,   // Strike distance affects probability of assignment
-  DTE = 15       // Days till expiration impacts time management
-}
+// Prefer const objects over enums for TS best practices in this project
+const SCORE_WEIGHT = {
+  PREMIUM: 40, // Premium has highest weight as it directly impacts returns
+  THETA: 30,   // Theta is second most important for consistent time decay
+  STRIKE: 15,  // Strike distance affects probability of assignment
+  DTE: 15      // Days till expiration impacts time management
+} as const;
 
 export type ScoreClass = 'score-excellent' | 'score-good' | 'score-moderate' | 'score-weak' | 'score-poor';
 
@@ -16,7 +17,7 @@ export class OptionScorer {
    * The max score is reached around 6.67% premium, but with diminishing returns beyond.
    */
   private static calculatePremiumScore(premiumPct: number): number {
-    return Math.min(ScoreWeight.PREMIUM, Math.log1p(premiumPct) * 18);
+    return Math.min(SCORE_WEIGHT.PREMIUM, Math.log1p(premiumPct) * 18);
   }
 
   /**
@@ -27,7 +28,7 @@ export class OptionScorer {
    */
   private static calculateThetaScore(theta?: number): number {
     return theta ? 
-      Math.min(ScoreWeight.THETA, Math.abs(theta) * 800) : 
+      Math.min(SCORE_WEIGHT.THETA, Math.abs(theta) * 800) : 
       0;
   }
 
@@ -38,7 +39,7 @@ export class OptionScorer {
    * More punishing than previous 1% reduction
    */
   private static calculateStrikeScore(strikeDistance: number): number {
-    return Math.max(0, ScoreWeight.STRIKE - (strikeDistance * 125));
+    return Math.max(0, SCORE_WEIGHT.STRIKE - (strikeDistance * 125));
   }
 
   /**
@@ -49,7 +50,7 @@ export class OptionScorer {
    * - Faster decay outside 30-40 DTE
    */
   private static calculateDteScore(dte: number): number {
-    const maxScore = ScoreWeight.DTE;
+    const maxScore = SCORE_WEIGHT.DTE;
     
     if (dte < 30) {
       return Math.max(0, maxScore - (30 - dte) * 0.8);

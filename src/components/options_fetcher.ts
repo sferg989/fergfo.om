@@ -1,5 +1,11 @@
+// Polyfill for global in browser environments
+if (typeof window !== 'undefined' && typeof global === 'undefined') {
+  (window as any).global = window;
+}
+
 import type { OptionData, OptionScore, ScoreClass, ScoredOption, StockOptionsData } from '../types/option';
 import { OptionScorer } from '../utils/optionScorer';
+import { RestService } from '@sferg989/astro-utils';
 
 export function formatDate(dateString: string): string {
   const date = new Date(dateString);
@@ -95,60 +101,93 @@ export function renderTopOptions(
 }
 
 export async function fetchStocksSequentially(symbols: string[], forceRefresh: boolean): Promise<void> {
+  // If not forcing refresh, fetch all stocks in parallel to leverage caching
+  if (!forceRefresh) {
+    await fetchStocksInParallel(symbols, forceRefresh);
+    return;
+  }
+
+  // Only do sequential fetching with delays when forcing refresh to avoid rate limits
   for (let i = 0; i < symbols.length; i++) {
     const symbol = symbols[i];
-    const statusElement = document.getElementById(`status-${symbol}`);
-    const contentElement = document.getElementById(`content-${symbol}`);
+    await fetchSingleStock(symbol, forceRefresh);
     
-    if (!contentElement) continue;
-    
-    if (statusElement) {
-      statusElement.innerHTML = `<span class="text-yellow-500">Fetching data...</span>`;
+    // Add delay between requests only when forcing refresh to avoid rate limits
+    if (i < symbols.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 2000)); // 2 seconds delay
+    }
+  }
+}
+
+async function fetchStocksInParallel(symbols: string[], forceRefresh: boolean): Promise<void> {
+  // Fetch all stocks in parallel when using cache
+  const fetchPromises = symbols.map(symbol => fetchSingleStock(symbol, forceRefresh));
+  await Promise.allSettled(fetchPromises);
+}
+
+async function fetchSingleStock(symbol: string, forceRefresh: boolean): Promise<void> {
+  const statusElement = document.getElementById(`status-${symbol}`);
+  const contentElement = document.getElementById(`content-${symbol}`);
+  
+  if (!contentElement) return;
+  
+  if (statusElement) {
+    statusElement.innerHTML = `<span class="text-yellow-500">Fetching data...</span>`;
+  }
+  
+  try {
+    // Ensure we're in a browser environment
+    if (typeof window === 'undefined') {
+      throw new Error('This function must run in a browser environment');
     }
     
-    try {
-      // Fetch data for this stock
-      const response = await fetch(`/api/stock-options?symbol=${symbol}&forceRefresh=${forceRefresh}`);
-      const data: StockOptionsData = await response.json();
-      
-      if (data.error) {
-        contentElement.innerHTML = `
-          <div class="error-message p-4 bg-red-50 text-red-700 rounded">
-            ${data.error}
-          </div>
-        `;
-      } else {
-        renderTopOptions(data.options, data.currentPrice, contentElement, symbol);
-      }
-      
-      // Update status with timestamp
-      if (statusElement) {
-        const now = new Date();
-        statusElement.innerHTML = `
-          Last updated: ${now.toLocaleTimeString()}
-        `;
-      }
-      
-      // If not the last stock, delay before fetching the next one
-      if (i < symbols.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 3000)); // 30 seconds delay
-      }
-    } catch (err) {
-      console.error(`Error fetching data for ${symbol}:`, err);
+    // Fetch data for this stock using RestService
+    const restService = RestService.Instance();
+    const response = await restService.Get<StockOptionsData>(`/api/stock-options?symbol=${symbol}&forceRefresh=${forceRefresh}`);
+    
+    if (!response.ok) {
       contentElement.innerHTML = `
         <div class="error-message p-4 bg-red-50 text-red-700 rounded">
-          Failed to fetch data: ${err instanceof Error ? err.message : 'Unknown error'}
+          Failed to fetch data (HTTP ${response.status})
         </div>
       `;
-      
-      if (statusElement) {
-        statusElement.innerHTML = `<span class="text-red-500">Error fetching data</span>`;
+      return;
+    }
+    
+    const data = response.body;
+    
+    if (data?.error) {
+      contentElement.innerHTML = `
+        <div class="error-message p-4 bg-red-50 text-red-700 rounded">
+          ${data.error}
+        </div>
+      `;
+    } else if (data) {
+      renderTopOptions(data.options, data.currentPrice, contentElement, symbol);
+    }
+    
+    // Update status with cache information
+    if (statusElement && data) {
+      const now = new Date();
+      let cacheInfo = '';
+      if (data.lastFetchTime && !forceRefresh) {
+        const lastFetch = new Date(data.lastFetchTime);
+        cacheInfo = ` (cached from ${lastFetch.toLocaleTimeString()})`;
       }
-      
-      // Still delay before the next one even if there was an error
-      if (i < symbols.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 3000)); // 30 seconds delay
-      }
+      statusElement.innerHTML = `
+        Last updated: ${now.toLocaleTimeString()}${cacheInfo}
+      `;
+    }
+  } catch (err) {
+    console.error(`Error fetching data for ${symbol}:`, err);
+    contentElement.innerHTML = `
+      <div class="error-message p-4 bg-red-50 text-red-700 rounded">
+        Failed to fetch data: ${err instanceof Error ? err.message : 'Unknown error'}
+      </div>
+    `;
+    
+    if (statusElement) {
+      statusElement.innerHTML = `<span class="text-red-500">Error fetching data</span>`;
     }
   }
 } 

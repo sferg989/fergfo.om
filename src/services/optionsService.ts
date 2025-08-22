@@ -1,4 +1,6 @@
-import { optional } from "astro:schema";
+import { DatabaseService } from './database_service';
+import { OptionScorer } from '../utils/optionScorer';
+import { RestService } from '@sferg989/astro-utils';
 
 export interface OptionData {
   contractName: string;
@@ -51,16 +53,25 @@ export class OptionsService {
   private apiKey: string;
   private cache: Map<string, { timestamp: number, data: any }> = new Map();
   private CACHE_DURATION = 3600000; // 60 minutes (3600000 ms)
+  private dbService: DatabaseService | null = null;
 
   private constructor() {
     this.apiKey = import.meta.env.PUBLIC_FINNHUB_API_KEY;
   }
 
-  static getInstance(): OptionsService {
+  static getInstance(db?: D1Database): OptionsService {
     if (!this.instance) {
       this.instance = new OptionsService();
     }
+    if (db && !this.instance.dbService) {
+      this.instance.dbService = DatabaseService.getInstance(db);
+    }
     return this.instance;
+  }
+
+  // Set database service for dependency injection
+  setDatabase(db: D1Database): void {
+    this.dbService = DatabaseService.getInstance(db);
   }
 
   private isCached(key: string): boolean {
@@ -100,14 +111,20 @@ export class OptionsService {
         return cachedPrice;
       }
 
-      const response = await fetch(
+      const restService = RestService.Instance();
+      const response = await restService.Get<Record<string, unknown>>(
         `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${this.apiKey}`
       );
+      
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      const data = await response.json();
-      const currentPrice = data.c || 0; // Current price
+      
+      const data = response.body as unknown;
+      const currentPrice: number =
+        typeof data === 'object' && data !== null && 'c' in data && typeof (data as Record<string, unknown>).c === 'number'
+          ? (data as Record<string, unknown>).c as number
+          : 0; // Current price
       
       // Cache the result
       this.setCachedData(cacheKey, currentPrice);
@@ -128,7 +145,8 @@ export class OptionsService {
         return cachedData;
       }
 
-      const response = await fetch(
+      const restService = RestService.Instance();
+      const response = await restService.Get<ApiResponse>(
         `https://finnhub.io/api/v1/stock/option-chain?symbol=${symbol}&token=${this.apiKey}`
       );
 
@@ -136,7 +154,11 @@ export class OptionsService {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data: ApiResponse = await response.json();
+      if (!response.body) {
+        throw new Error('No data received from API');
+      }
+      
+      const data = response.body;
       const currentPrice = data.lastTradePrice;
 
       if (!data.data || !data.data.length) {
@@ -144,6 +166,25 @@ export class OptionsService {
       }
 
       const options = this.transformOptionsData(data.data, currentPrice);
+
+      // Save to database if available
+      if (this.dbService && options.length > 0) {
+        try {
+          const scores = options.map(option => 
+            OptionScorer.calculateScore(option, currentPrice)
+          );
+          
+          await this.dbService.saveCompleteSnapshot(
+            symbol,
+            currentPrice,
+            options,
+            scores
+          );
+        } catch (dbError) {
+          console.error('Failed to save to database:', dbError);
+          // Continue execution even if database save fails
+        }
+      }
 
       const result = { options, currentPrice };
       this.setCachedData(cacheKey, result);
@@ -172,17 +213,6 @@ export class OptionsService {
     };
 
     // Process all expiry dates
-    // console.log('data', data[5].expirationDate)
-    // console.log('data', data[5].options.PUT)
-    const rightdata = data[5].options.PUT.filter(option=>{
-      
-      
-
-      
-    })
-
-    
-    
     return data.flatMap(dateGroup => {
       if (!dateGroup.options?.PUT) return [];
 
@@ -235,5 +265,34 @@ export class OptionsService {
     }
     
     return null;
+  }
+
+  // Database query methods
+  async getHistoricalSnapshots(symbol: string, limit: number = 10) {
+    if (!this.dbService) {
+      throw new Error('Database service not available');
+    }
+    return await this.dbService.getRecentSnapshots(symbol, limit);
+  }
+
+  async getOptionsForSnapshot(snapshotId: string) {
+    if (!this.dbService) {
+      throw new Error('Database service not available');
+    }
+    return await this.dbService.getOptionsForSnapshot(snapshotId);
+  }
+
+  async getTopPerformingOptions(symbol: string, days: number = 30, limit: number = 10) {
+    if (!this.dbService) {
+      throw new Error('Database service not available');
+    }
+    return await this.dbService.getTopPerformingOptions(symbol, days, limit);
+  }
+
+  async getStockPerformanceData(symbol: string, days: number = 30) {
+    if (!this.dbService) {
+      throw new Error('Database service not available');
+    }
+    return await this.dbService.getStockPerformanceData(symbol, days);
   }
 } 

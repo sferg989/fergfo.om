@@ -15,8 +15,29 @@ const { title, description } = Astro.props;
   <head>
     <SEO title={title} description={description} />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <script>
+      // Global polyfill for browser environments
+      if (typeof global === 'undefined') {
+        window.global = window;
+      }
+    </script>
   </head>
   <body class="min-h-screen bg-gray-50">
+    <header class="bg-white/90 backdrop-blur border-b border-gray-200 sticky top-0 z-40">
+      <nav class="max-w-[1200px] mx-auto px-4 h-14 flex items-center justify-between">
+        <a href="/" class="text-lg font-bold text-gray-800 hover:text-blue-700 transition-colors">
+          fergfo.om
+        </a>
+        <div class="flex items-center gap-2">
+          <a href="/preferred" class="px-3 py-1.5 text-sm rounded-md text-gray-700 hover:text-blue-700 hover:bg-blue-50 transition-colors">
+            Preferred
+          </a>
+          <a href="/scoring" class="px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm">
+            Scoring Guide
+          </a>
+        </div>
+      </nav>
+    </header>
     <slot />
   </body>
 </html>
