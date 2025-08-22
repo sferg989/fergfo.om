@@ -21,7 +21,8 @@ module.exports = {
     'no-restricted-imports': ['error'],
     'curly': 'error',
     'eol-last': 'error',
-    'indent': ['error', 2, { 'SwitchCase': 1 }],
+    // Disable indent rule for Astro files due to mixed content causing stack overflow
+    'indent': 'off',
     'no-bitwise': 'error',
     'no-dupe-args': 'error',
     'prefer-const': 'error',
