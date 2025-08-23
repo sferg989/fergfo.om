@@ -1,0 +1,199 @@
+---
+import { OptionsService } from '../services/optionsService';
+import { OptionScorer } from '../utils/optionScorer';
+import type { ScoredOption, OptionData } from '../types/option';
+
+interface Props {
+  symbol: string;
+  forceRefresh?: boolean;
+}
+
+const { symbol, forceRefresh = false } = Astro.props;
+
+// Standard D1 database access pattern
+const db = (Astro.locals.runtime?.env?.DB as D1Database) || null;
+
+let optionsData: {
+  options: OptionData[];
+  currentPrice: number;
+  scoredOptions: ScoredOption[];
+  topOptions: ScoredOption[];
+  highestScore: number;
+  error?: string;
+} = {
+  options: [],
+  currentPrice: 0,
+  scoredOptions: [],
+  topOptions: [],
+  highestScore: 0
+};
+
+let statusInfo: {
+  lastFetchTime: Date | null;
+  cacheTimeRemaining: number | null;
+} = {
+  lastFetchTime: null,
+  cacheTimeRemaining: null
+};
+
+if (db) {
+  try {
+    const optionsService = OptionsService.getInstance(db);
+
+    // Fetch options data
+    const rawData = await optionsService.fetchOptionsData(symbol, forceRefresh);
+
+    if (rawData.error) {
+      optionsData = {
+        ...optionsData,
+        error: rawData.error
+      };
+    } else if (rawData.options.length > 0) {
+      // Score the options
+      const scoredOptions: ScoredOption[] = rawData.options
+        .map(option => ({
+          ...option,
+          score: OptionScorer.calculateScore(option, rawData.currentPrice)
+        }))
+        .sort((a, b) => b.score.total - a.score.total);
+
+      // Get the highest score
+      const highestScore = scoredOptions.length > 0 ? scoredOptions[0].score.total : 0;
+
+      // Get all options with the highest score (including ties)
+      const topOptions = scoredOptions.filter(option =>
+        Math.abs(option.score.total - highestScore) < 0.01 // Using small epsilon for float comparison
+      );
+
+      optionsData = {
+        options: rawData.options,
+        currentPrice: rawData.currentPrice,
+        scoredOptions,
+        topOptions,
+        highestScore,
+      };
+    }
+
+    // Get cache status information
+    statusInfo = {
+      lastFetchTime: optionsService.getLastFetchTime(symbol, 'options'),
+      cacheTimeRemaining: optionsService.getCacheTimeRemaining(symbol, 'options')
+    };
+
+  } catch (err) {
+    console.error(`Error fetching options for ${symbol}:`, err);
+    optionsData = {
+      ...optionsData,
+      error: err instanceof Error ? err.message : 'Failed to fetch options data'
+    };
+  }
+} else {
+  console.warn(`Database not available for ${symbol}`);
+  optionsData = {
+    ...optionsData,
+    error: 'Database not available'
+  };
+}
+
+// Helper functions
+function formatDate(dateString: string): string {
+  const date = new Date(dateString);
+  return date.toLocaleDateString();
+}
+
+function calculateAnnualPremium(bid: number, strike: number, daysToExpiry: number): string {
+  const premiumPct = (bid / strike) * 100;
+  return (premiumPct * 365 / daysToExpiry).toFixed(2);
+}
+---
+
+<div class="stock-section" id={`stock-${symbol}`}>
+  <div class="flex justify-between items-center mb-3">
+    <h2 class="text-xl font-semibold text-blue-600">{symbol}</h2>
+    <div class="text-xs text-gray-500" id={`status-${symbol}`}>
+      {statusInfo.lastFetchTime && !forceRefresh && (
+        <span>Cached from {statusInfo.lastFetchTime.toLocaleTimeString()}</span>
+      )}
+      {!statusInfo.lastFetchTime || forceRefresh && (
+        <span>Fresh data at {new Date().toLocaleTimeString()}</span>
+      )}
+    </div>
+  </div>
+
+  {optionsData.error ? (
+    <div class="p-4 bg-red-50 text-red-700 rounded">
+      Error: {optionsData.error}
+    </div>
+  ) : optionsData.topOptions.length > 0 ? (
+    <div class="high-score-section">
+      <h3 class="text-lg font-bold mb-3">
+        🏆 Top Scoring Options (Score: {Math.round(optionsData.highestScore)})
+      </h3>
+      <div class="overflow-x-auto">
+        <table class="options-table">
+          <caption class="sr-only">Top scoring options for {symbol}</caption>
+          <thead>
+            <tr>
+              <th scope="col">Score</th>
+              <th scope="col">Expiry</th>
+              <th scope="col">Strike</th>
+              <th scope="col">Bid</th>
+              <th scope="col">Ask</th>
+              <th scope="col">Volume</th>
+              <th scope="col">IV%</th>
+              <th scope="col">Theta</th>
+              <th scope="col">Simple%</th>
+              <th scope="col">Ann. Prem%</th>
+            </tr>
+          </thead>
+          <tbody>
+            {optionsData.topOptions.map((option) => {
+              const dte = Math.ceil(
+                (new Date(option.expirationDate).getTime() - new Date().getTime()) /
+                (1000 * 60 * 60 * 24)
+              );
+              const simplePremiumPct = (option.bid / optionsData.currentPrice * 100).toFixed(2);
+              const annualPremium = calculateAnnualPremium(option.bid, option.strike, dte);
+              const scoreClass = OptionScorer.getScoreClass(option.score.total);
+
+              return (
+                <tr>
+                  <td class={scoreClass}>{Math.round(option.score.total)}</td>
+                  <td>{formatDate(option.expirationDate)}</td>
+                  <td>${option.strike.toFixed(2)}</td>
+                  <td>${option.bid.toFixed(2)}</td>
+                  <td>${option.ask.toFixed(2)}</td>
+                  <td>{option.volume.toLocaleString()}</td>
+                  <td>{(option.impliedVolatility * 100).toFixed(2)}%</td>
+                  <td>{option.theta ? option.theta.toFixed(4) : 'N/A'}</td>
+                  <td>{simplePremiumPct}%</td>
+                  <td>{annualPremium}%</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  ) : (
+    <div class="p-4 bg-gray-50 rounded text-center text-gray-500">
+      No options found for {symbol}
+    </div>
+  )}
+</div>
+
+<style>
+  .stock-section {
+    background: #ffffff;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .high-score-section {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid #e9ecef;
+  }
+</style>
