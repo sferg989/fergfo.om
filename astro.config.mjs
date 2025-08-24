@@ -21,10 +21,10 @@ export default defineConfig({
         }
       }
     } : {
-      // Production configuration - let Cloudflare Pages handle bindings
+      // Production configuration for Workers deployment
       runtime: {
         mode: 'remote',
-        type: 'pages'
+        type: 'module'
       }
     }
   ),
