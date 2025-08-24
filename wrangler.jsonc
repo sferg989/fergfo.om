@@ -1,0 +1,36 @@
+{
+  "name": "fergfo-com",
+  "compatibility_date": "2024-08-15",
+  "env": {
+    "production": {
+      "account_id": "bf9a1ae5b7974b7510d15e0d5b6a8ebc",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "options-tracker",
+          "database_id": "06cd1245-d0de-4491-be4b-4f1e7c2de1f3",
+          "migrations_dir": "src/migrations"
+        }
+      ]
+    },
+    "development": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "options-tracker-local",
+          "database_id": "a89f41ce-342e-4711-8aec-ab0d6f8fdaca",
+          "migrations_dir": "src/migrations"
+        }
+      ]
+    }
+  },
+  // Default configuration for wrangler dev
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "options-tracker-local",
+      "database_id": "a89f41ce-342e-4711-8aec-ab0d6f8fdaca",
+      "migrations_dir": "src/migrations"
+    }
+  ]
+}
