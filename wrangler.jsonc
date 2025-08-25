@@ -13,11 +13,11 @@
   },
   "routes": [
     {
-      "pattern": "fergfo.com/*",
+      "pattern": "fergfo.com",
       "custom_domain": true
     },
     {
-      "pattern": "www.fergfo.com/*",
+      "pattern": "www.fergfo.com",
       "custom_domain": true
     }
   ],
@@ -27,11 +27,11 @@
       "account_id": "bf9a1ae5b7974b7510d15e0d5b6a8ebc",
       "routes": [
         {
-          "pattern": "fergfo.com/*",
+          "pattern": "fergfo.com",
           "custom_domain": true
         },
         {
-          "pattern": "www.fergfo.com/*",
+          "pattern": "www.fergfo.com",
           "custom_domain": true
         }
       ],
