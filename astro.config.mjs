@@ -25,6 +25,14 @@ export default defineConfig({
       runtime: {
         mode: 'remote',
         type: 'module'
+      },
+      // Ensure assets are properly configured for Workers
+      imageService: 'passthrough',
+      platformProxy: {
+        enabled: true
+      },
+      routes: {
+        strategy: 'auto'
       }
     }
   ),
@@ -33,6 +41,30 @@ export default defineConfig({
     ssr: {
       external: ['node:buffer'],
     },
+    build: {
+      // Ensure CSS is properly bundled for Workers
+      cssCodeSplit: false,
+      assetsInlineLimit: 0,
+      rollupOptions: {
+        output: {
+          // Ensure consistent asset naming
+          assetFileNames: '_astro/[name].[hash][extname]'
+        }
+      }
+    }
   },
-  integrations: [tailwind()],
+  integrations: [
+    tailwind({
+      // Ensure Tailwind CSS is properly optimized for production
+      applyBaseStyles: true,
+      config: {
+        content: ['./src/**/*.{astro,html,js,jsx,ts,tsx,md,mdx}']
+      }
+    })
+  ],
+  build: {
+    // Ensure proper asset handling in production
+    inlineStylesheets: 'never',
+    assets: '_astro'
+  }
 })

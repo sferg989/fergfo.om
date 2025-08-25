@@ -3,9 +3,20 @@
   "main": "dist/_worker.js",
   "compatibility_date": "2025-07-24",
   "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "dist",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash"
+  },
+
   "env": {
     "production": {
       "account_id": "bf9a1ae5b7974b7510d15e0d5b6a8ebc",
+      "assets": {
+        "directory": "dist",
+        "binding": "ASSETS",
+        "html_handling": "auto-trailing-slash"
+      },
       "d1_databases": [
         {
           "binding": "DB",
@@ -16,6 +27,11 @@
       ]
     },
     "development": {
+      "assets": {
+        "directory": "dist",
+        "binding": "ASSETS",
+        "html_handling": "auto-trailing-slash"
+      },
       "d1_databases": [
         {
           "binding": "DB",

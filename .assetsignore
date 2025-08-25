@@ -1,0 +1,17 @@
+# Exclude worker files from static assets
+_worker.js
+_worker.js.map
+
+# Exclude build artifacts that shouldn't be served as static assets
+*.log
+*.tmp
+.DS_Store
+.env*
+
+# Exclude any test files
+*.test.*
+*.spec.*
+
+# DO NOT exclude CSS and JS files - they need to be served
+# *.css - commented out to allow CSS files
+# *.js - commented out to allow JS files
