@@ -1,19 +1,22 @@
 {
   "name": "fergfo-com",
-  "main": "dist/_worker.js",
+  "main": "./dist/_worker.js",
   "compatibility_date": "2025-07-24",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
-    "directory": "dist",
+    "directory": "./dist",
     "binding": "ASSETS",
     "html_handling": "auto-trailing-slash"
+  },
+  "observability": {
+    "enabled": true
   },
 
   "env": {
     "production": {
       "account_id": "bf9a1ae5b7974b7510d15e0d5b6a8ebc",
       "assets": {
-        "directory": "dist",
+        "directory": "./dist",
         "binding": "ASSETS",
         "html_handling": "auto-trailing-slash"
       },
@@ -28,7 +31,7 @@
     },
     "development": {
       "assets": {
-        "directory": "dist",
+        "directory": "./dist",
         "binding": "ASSETS",
         "html_handling": "auto-trailing-slash"
       },
