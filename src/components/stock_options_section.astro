@@ -5,10 +5,9 @@ import type { ScoredOption, OptionData } from '../types/option';
 
 interface Props {
   symbol: string;
-  forceRefresh?: boolean;
 }
 
-const { symbol, forceRefresh = false } = Astro.props;
+const { symbol } = Astro.props;
 
 // Standard D1 database access pattern
 const db = (Astro.locals.runtime?.env?.DB as D1Database) || null;
@@ -28,20 +27,13 @@ let optionsData: {
   highestScore: 0
 };
 
-let statusInfo: {
-  lastFetchTime: Date | null;
-  cacheTimeRemaining: number | null;
-} = {
-  lastFetchTime: null,
-  cacheTimeRemaining: null
-};
 
 if (db) {
   try {
     const optionsService = OptionsService.getInstance(db);
 
     // Fetch options data
-    const rawData = await optionsService.fetchOptionsData(symbol, forceRefresh);
+    const rawData = await optionsService.fetchOptionsData(symbol);
 
     if (rawData.error) {
       optionsData = {
@@ -74,11 +66,6 @@ if (db) {
       };
     }
 
-    // Get cache status information
-    statusInfo = {
-      lastFetchTime: optionsService.getLastFetchTime(symbol, 'options'),
-      cacheTimeRemaining: optionsService.getCacheTimeRemaining(symbol, 'options')
-    };
 
   } catch (err) {
     console.error(`Error fetching options for ${symbol}:`, err);
@@ -110,14 +97,6 @@ function calculateAnnualPremium(bid: number, strike: number, daysToExpiry: numbe
 <div class="stock-section" id={`stock-${symbol}`}>
   <div class="flex justify-between items-center mb-3">
     <h2 class="text-xl font-semibold text-blue-600">{symbol}</h2>
-    <div class="text-xs text-gray-500" id={`status-${symbol}`}>
-      {statusInfo.lastFetchTime && !forceRefresh && (
-        <span>Cached from {statusInfo.lastFetchTime.toLocaleTimeString()}</span>
-      )}
-      {!statusInfo.lastFetchTime || forceRefresh && (
-        <span>Fresh data at {new Date().toLocaleTimeString()}</span>
-      )}
-    </div>
   </div>
 
   {optionsData.error ? (

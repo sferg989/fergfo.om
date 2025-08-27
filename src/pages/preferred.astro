@@ -4,9 +4,7 @@ export const prerender = false;
 import Layout from '../layouts/Layout.astro';
 import PreferredStocksView from '../components/preferredStocksView.astro';
 
-// Check if we should force refresh the data
-const currentUrl = new URL(Astro.request.url);
-const shouldRefresh = currentUrl.searchParams.get('refresh') === 'true';
+
 ---
 
 <Layout title="Preferred Stocks Options">
@@ -21,7 +19,7 @@ const shouldRefresh = currentUrl.searchParams.get('refresh') === 'true';
       </a>
     </div>
 
-    <PreferredStocksView forceRefresh={shouldRefresh} />
+    <PreferredStocksView />
   </main>
 </Layout>
 

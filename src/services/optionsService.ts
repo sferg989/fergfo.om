@@ -1,6 +1,6 @@
 import { DatabaseService } from './database_service';
 import { OptionScorer } from '../utils/optionScorer';
-import { RestService } from '@sferg989/astro-utils';
+import YahooFinance from 'yahoo-finance2';
 
 export interface OptionData {
   contractName: string;
@@ -17,46 +17,32 @@ export interface OptionData {
   theta?: number;
 }
 
-interface RawOptionData {
-  contractName: string;
-  contractSize: string;
-  type: string;
+interface YahooOptionData {
+  percentChange?: number;
+  openInterest?: number;
   strike: number;
-  lastPrice: number;
-  bid: number;
-  ask: number;
-  volume: number;
-  openInterest: number;
-  expirationDate: string;
-  impliedVolatility: number;
-  delta?: number;
-  gamma?: number;
-  theta?: number;
+  change?: number;
+  inTheMoney: boolean;
+  impliedVolatility?: number;
+  volume?: number;
+  ask?: number;
+  contractSymbol: string;
+  lastTradeDate?: Date;
+  expiration?: Date;
+  contractSize?: string;
+  currency?: string;
+  bid?: number;
+  lastPrice?: number;
 }
 
-interface ApiResponse {
-  code: string;
-  exchange: string;
-  lastTradeDate: string;
-  lastTradePrice: number;
-  data: {
-    expirationDate: string;
-    options: {
-      PUT: RawOptionData[];
-      CALL: RawOptionData[];
-    }
-  }[];
-}
+
 
 export class OptionsService {
   private static instance: OptionsService;
-  private apiKey: string;
-  private cache: Map<string, { timestamp: number, data: any }> = new Map();
-  private CACHE_DURATION = 3600000; // 60 minutes (3600000 ms)
   private dbService: DatabaseService | null = null;
 
   private constructor() {
-    this.apiKey = import.meta.env.PUBLIC_FINNHUB_API_KEY;
+    // Yahoo Finance doesn't require an API key
   }
 
   static getInstance(db?: D1Database): OptionsService {
@@ -74,60 +60,11 @@ export class OptionsService {
     this.dbService = DatabaseService.getInstance(db);
   }
 
-  private isCached(key: string): boolean {
-    const cachedData = this.cache.get(key);
-    return !!cachedData && (Date.now() - cachedData.timestamp) < this.CACHE_DURATION;
-  }
-
-  private getCachedData<T>(key: string): T | null {
-    if (this.isCached(key)) {
-      return this.cache.get(key)!.data as T;
-    }
-    return null;
-  }
-
-  private setCachedData<T>(key: string, data: T): void {
-    this.cache.set(key, { timestamp: Date.now(), data });
-  }
-
-  // Method to clear cache for testing purposes or manual refresh
-  clearCache(symbol?: string): void {
-    if (symbol) {
-      // Clear cache for specific symbol
-      const keys = [`price_${symbol}`, `options_${symbol}`];
-      keys.forEach(key => this.cache.delete(key));
-    } else {
-      // Clear entire cache
-      this.cache.clear();
-    }
-  }
-
-  async getCurrentPrice(symbol: string, forceRefresh = false): Promise<number> {
+  async getCurrentPrice(symbol: string): Promise<number> {
     try {
-      const cacheKey = `price_${symbol}`;
-      const cachedPrice = !forceRefresh ? this.getCachedData<number>(cacheKey) : null;
-      
-      if (cachedPrice !== null) {
-        return cachedPrice;
-      }
-
-      const restService = RestService.Instance();
-      const response = await restService.Get<Record<string, unknown>>(
-        `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${this.apiKey}`
-      );
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = response.body as unknown;
-      const currentPrice: number =
-        typeof data === 'object' && data !== null && 'c' in data && typeof (data as Record<string, unknown>).c === 'number'
-          ? (data as Record<string, unknown>).c as number
-          : 0; // Current price
-      
-      // Cache the result
-      this.setCachedData(cacheKey, currentPrice);
+      // Get basic options data to retrieve current price from quote
+      const data = await YahooFinance.options(symbol, { formatted: true });
+      const currentPrice = data.quote?.regularMarketPrice ?? 0;
       
       return currentPrice;
     } catch (error) {
@@ -136,48 +73,50 @@ export class OptionsService {
     }
   }
 
-  async fetchOptionsData(symbol: string, forceRefresh = false): Promise<{ options: OptionData[]; currentPrice: number; error?: string }> {
+  async fetchOptionsData(symbol: string): Promise<{ options: OptionData[]; currentPrice: number; error?: string }> {
     try {
-      const cacheKey = `options_${symbol}`;
-      const cachedData = !forceRefresh ? this.getCachedData<{ options: OptionData[]; currentPrice: number }>(cacheKey) : null;
+      // Get base options data to retrieve current price and available expiration dates
+      const baseData = await YahooFinance.options(symbol, { formatted: true });
+      const currentPrice = baseData.quote?.regularMarketPrice ?? 0;
+
+      // Get Friday expiration dates within 90 days
+      const fridayDates = this.getFridayExpirationDates(baseData.expirationDates);
       
-      if (cachedData !== null) {
-        return cachedData;
-      }
-
-      const restService = RestService.Instance();
-      const response = await restService.Get<ApiResponse>(
-        `https://finnhub.io/api/v1/stock/option-chain?symbol=${symbol}&token=${this.apiKey}`
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      if (!response.body) {
-        throw new Error('No data received from API');
-      }
+      // Fetch options data for each Friday expiration date
+      const allOptions: OptionData[] = [];
       
-      const data = response.body;
-      const currentPrice = data.lastTradePrice;
-
-      if (!data.data || !data.data.length) {
-        throw new Error('No options data available');
+      for (const date of fridayDates) {
+        try {
+          const dateOptionsData = await YahooFinance.options(symbol, {
+            date: date,
+            formatted: true,
+          });
+          
+          if (dateOptionsData.options[0]?.puts) {
+            const transformedOptions = this.transformYahooOptionsData(
+              dateOptionsData.options[0].puts, 
+              currentPrice,
+              date
+            );
+            allOptions.push(...transformedOptions);
+          }
+        } catch (dateError) {
+          console.error(`Error fetching options for date ${date.toISOString().split('T')[0]}:`, dateError);
+          // Continue with other dates even if one fails
+        }
       }
-
-      const options = this.transformOptionsData(data.data, currentPrice);
 
       // Save to database if available
-      if (this.dbService && options.length > 0) {
+      if (this.dbService && allOptions.length > 0) {
         try {
-          const scores = options.map(option => 
+          const scores = allOptions.map(option => 
             OptionScorer.calculateScore(option, currentPrice)
           );
           
           await this.dbService.saveCompleteSnapshot(
             symbol,
             currentPrice,
-            options,
+            allOptions,
             scores
           );
         } catch (dbError) {
@@ -186,10 +125,7 @@ export class OptionsService {
         }
       }
 
-      const result = { options, currentPrice };
-      this.setCachedData(cacheKey, result);
-      
-      return result;
+      return { options: allOptions, currentPrice };
     } catch (error) {
       console.error('Error fetching options data:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -201,71 +137,63 @@ export class OptionsService {
     }
   }
 
-  private transformOptionsData(data: ApiResponse['data'], currentPrice: number): OptionData[] {
-    if (!data || !data.length) {
-      return [];
-    }
-
+  private getFridayExpirationDates(expirationDates: Date[]): Date[] {
     const today = new Date();
+    
+    // Find the next Friday
+    const daysUntilNextFriday = (5 - today.getDay() + 7) % 7;
+    const nextFriday = new Date(today.getTime() + (daysUntilNextFriday * 24 * 60 * 60 * 1000));
+    
+    // Generate the next 5 Fridays
+    const fridayDates: Date[] = [];
+    for (let i = 0; i < 10; i++) {
+      let fridayDate = new Date(nextFriday.getTime() + (i * 7 * 24 * 60 * 60 * 1000));
+      fridayDate = new Date(fridayDate.toISOString().split('T')[0]);
+      fridayDates.push(fridayDate);
+    }
+    return fridayDates;
+  }
+
+  private transformYahooOptionsData(puts: YahooOptionData[], currentPrice: number, expirationDate: Date): OptionData[] {
     const priceRange = {
       min: currentPrice * 0.9,
       max: currentPrice * 1.1
     };
 
-    // Process all expiry dates
-    return data.flatMap(dateGroup => {
-      if (!dateGroup.options?.PUT) return [];
+    return puts
+      .filter(option => {
+        // Ensure we have valid strike price and some bid/ask data
+        return option.strike >= priceRange.min && 
+               option.strike <= priceRange.max &&
+               (option.bid ?? 0) > 0; // Only include options with meaningful bid prices
+      })
+      .map((option): OptionData => {
+        // Estimate theta based on time decay if not provided
+        // This is a rough estimation: theta ≈ -option premium / days to expiry / 365
+        const daysToExpiry = Math.ceil(
+          (expirationDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+        );
+        const estimatedTheta = daysToExpiry > 0 ? 
+          -((option.bid ?? 0) / daysToExpiry / 365) : undefined;
 
-      return dateGroup.options.PUT
-        .filter(option => {
-          const expiryDate = new Date(option.expirationDate);
-          const daysToExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-          return option.strike >= priceRange.min && 
-                 option.strike <= priceRange.max && 
-                 daysToExpiry <= 60;
-        })
-        .map((option): OptionData => ({
-          contractName: option.contractName,
+        return {
+          contractName: option.contractSymbol,
           strike: option.strike,
-          lastPrice: option.lastPrice,
-          bid: option.bid,
-          ask: option.ask,
-          volume: option.volume,
-          openInterest: option.openInterest,
-          expirationDate: option.expirationDate,
-          impliedVolatility: option.impliedVolatility,
-          delta: option.delta,
-          gamma: option.gamma,
-          theta: option.theta
-        }));
-    });
+          lastPrice: option.lastPrice ?? 0,
+          bid: option.bid ?? 0,
+          ask: option.ask ?? 0,
+          volume: option.volume ?? 0,
+          openInterest: option.openInterest ?? 0,
+          expirationDate: expirationDate.toISOString(),
+          impliedVolatility: option.impliedVolatility ?? 0,
+          delta: undefined, // Yahoo Finance doesn't provide Greeks in basic response
+          gamma: undefined,
+          theta: estimatedTheta // Use estimated theta for scoring
+        };
+      });
   }
 
-  // Get the timestamp when the data was last fetched
-  getLastFetchTime(symbol: string, dataType: 'price' | 'options'): Date | null {
-    const key = dataType === 'price' ? `price_${symbol}` : `options_${symbol}`;
-    const cachedData = this.cache.get(key);
-    
-    if (cachedData) {
-      return new Date(cachedData.timestamp);
-    }
-    
-    return null;
-  }
 
-  // Get time remaining until cache expiration in minutes
-  getCacheTimeRemaining(symbol: string, dataType: 'price' | 'options'): number | null {
-    const key = dataType === 'price' ? `price_${symbol}` : `options_${symbol}`;
-    const cachedData = this.cache.get(key);
-    
-    if (cachedData) {
-      const expirationTime = cachedData.timestamp + this.CACHE_DURATION;
-      const timeRemaining = Math.max(0, expirationTime - Date.now());
-      return Math.ceil(timeRemaining / 60000); // Convert to minutes
-    }
-    
-    return null;
-  }
 
   // Database query methods
   async getHistoricalSnapshots(symbol: string, limit: number = 10) {

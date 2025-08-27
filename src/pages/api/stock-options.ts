@@ -5,7 +5,6 @@ import type { StockOptionsData } from '../../types/option';
 export const GET: APIRoute = async ({ request, locals }) => {
   const url = new URL(request.url);
   const symbol = url.searchParams.get('symbol');
-  const forceRefresh = url.searchParams.get('forceRefresh') === 'true';
   
   if (!symbol) {
     return new Response(
@@ -19,17 +18,13 @@ export const GET: APIRoute = async ({ request, locals }) => {
     const db = (locals.runtime?.env?.DB as D1Database) || null;
     const optionsService = OptionsService.getInstance(db);
     
-    const { options, currentPrice, error } = await optionsService.fetchOptionsData(symbol, forceRefresh);
-    const lastFetchTime = optionsService.getLastFetchTime(symbol, 'options');
-    const cacheTimeRemaining = optionsService.getCacheTimeRemaining(symbol, 'options');
+    const { options, currentPrice, error } = await optionsService.fetchOptionsData(symbol);
     
     const responseData: StockOptionsData = {
       symbol,
       options,
       currentPrice,
-      error,
-      lastFetchTime: lastFetchTime ? lastFetchTime.toISOString() : null,
-      cacheTimeRemaining
+      error
     };
     
     return new Response(

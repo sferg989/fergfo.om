@@ -4,22 +4,19 @@ import { groupOptionsByExpiry } from '../utils/optionsUtils';
 import OptionsGroup from './optionsGroup.astro';
 import HighScoreOptions from './highScoreOptions.astro';
 import HighestScoreOption from './highest_score_option.astro';
+import { Debug } from 'astro:components';
 
 interface Props {
   symbol: string;
-  forceRefresh?: boolean;
 }
 
-const { symbol, forceRefresh = false } = Astro.props;
+const { symbol } = Astro.props;
 
 // Get D1 database from runtime if available
 const db = (Astro.locals.runtime?.env?.DB as D1Database) || null;
 const optionsService = OptionsService.getInstance(db);
-const { options, currentPrice, error } = await optionsService.fetchOptionsData(symbol, forceRefresh);
+const { options, currentPrice, error } = await optionsService.fetchOptionsData(symbol);
 
-// Get cache information
-const lastFetchTime = optionsService.getLastFetchTime(symbol, 'options');
-const cacheTimeRemaining = optionsService.getCacheTimeRemaining(symbol, 'options');
 const sortedGroups = groupOptionsByExpiry(options);
 
 ---
@@ -35,35 +32,17 @@ const sortedGroups = groupOptionsByExpiry(options);
         <div class="flex items-center gap-2">
           <span class="symbol">{symbol}</span>
           <span class="price">Current Price: ${currentPrice.toFixed(4)}</span>
-          <div class="cache-info">
-            {lastFetchTime && (
-              <div class="text-xs text-gray-600">
-                Data from: {lastFetchTime.toLocaleTimeString()}
-                {cacheTimeRemaining !== null && (
-                  <span>(Refreshes in {cacheTimeRemaining} min)</span>
-                )}
-              </div>
-            )}
-          </div>
         </div>
         <div class="flex items-center gap-2">
           <span class="price-range">
             Range: ${(currentPrice * 0.9).toFixed(2)} - ${(currentPrice * 1.1).toFixed(2)}
           </span>
-          <form method="get">
-            <input type="hidden" name="symbol" value={symbol} />
-            <input type="hidden" name="refresh" value="true" />
-            <button type="submit" class="refresh-button">
-              Refresh Data
-            </button>
-          </form>
         </div>
       </div>
-
       {options.length > 0 && (
         <HighestScoreOption options={options} currentPrice={currentPrice} symbol={symbol} />
       )}
-
+{/* <Debug value={options} /> */}
       <HighScoreOptions options={options} currentPrice={currentPrice} />
 
       <div class="expiry-groups">

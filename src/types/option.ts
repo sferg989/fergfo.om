@@ -32,6 +32,4 @@ export interface StockOptionsData {
   options: OptionData[];
   currentPrice: number;
   error?: string;
-  lastFetchTime: string | null;
-  cacheTimeRemaining: number | null;
 } 
