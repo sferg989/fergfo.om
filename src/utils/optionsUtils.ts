@@ -1,4 +1,5 @@
 import { ReturnCalculator } from './returnCalculator';
+import type { OptionData, GroupedOption } from '../types/option';
 
 export const formatContractName = (contractName: string): string => {
   // Ensure the contract name is in the expected format (e.g., 'NET250131P00135000' or 'AAPL250131P00320000')
@@ -89,28 +90,6 @@ export const groupOptionsByExpiry = (options: OptionData[]) => {
     new Date(a.rawExpiryDate).getTime() - new Date(b.rawExpiryDate).getTime()
   );
 };
-
-export interface GroupedOption {
-  expiryDate: string;
-  rawExpiryDate: string;
-  daysToExpiry: number;
-  options: OptionData[];
-}
-
-export interface OptionData {
-  contractName: string;
-  strike: number;
-  lastPrice: number;
-  bid: number;
-  ask: number;
-  volume: number;
-  openInterest: number;
-  expirationDate: string;
-  impliedVolatility: number;
-  delta?: number;
-  gamma?: number;
-  theta?: number;
-}
 
 export const getThetaClass = (theta: number | undefined): string => {
   if (!theta) return '';

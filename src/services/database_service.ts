@@ -1,10 +1,6 @@
 import type {
   StockSnapshot,
-  OptionSnapshot,
-  OptionScoreSnapshot,
   CreateStockSnapshotParams,
-  CreateOptionSnapshotParams,
-  CreateOptionScoreSnapshotParams,
   HistoricalOptionData,
   StockPerformanceData
 } from '../types/database';

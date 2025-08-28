@@ -17,28 +17,38 @@ const pageDescription = 'How scores are calculated and key options-selling vocab
     <section class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
       <div class="lg:col-span-2 bg-white rounded-xl shadow p-6">
         <h2 class="text-2xl font-bold mb-4">How the Score Is Calculated</h2>
-        <p class="text-gray-700 mb-4">Each option receives a composite score out of 100 based on four factors with fixed weights:</p>
+        <p class="text-gray-700 mb-4">Each option receives a composite score out of 100 based on six factors with fixed weights, plus a penalty for wide bid-ask spreads:</p>
 
-        <div class="grid sm:grid-cols-2 gap-4 mb-6">
+        <div class="grid sm:grid-cols-2 md:grid-cols-3 gap-4 mb-6">
           <div class="rounded-lg border border-gray-200 p-4">
             <div class="text-sm uppercase tracking-wide text-gray-500">Weight</div>
-            <div class="mt-1 text-3xl font-extrabold">40</div>
+            <div class="mt-1 text-3xl font-extrabold">35</div>
             <div class="text-gray-700 mt-1">Premium % of Strike</div>
           </div>
           <div class="rounded-lg border border-gray-200 p-4">
             <div class="text-sm uppercase tracking-wide text-gray-500">Weight</div>
-            <div class="mt-1 text-3xl font-extrabold">30</div>
+            <div class="mt-1 text-3xl font-extrabold">25</div>
             <div class="text-gray-700 mt-1">Theta (time decay)</div>
           </div>
           <div class="rounded-lg border border-gray-200 p-4">
             <div class="text-sm uppercase tracking-wide text-gray-500">Weight</div>
-            <div class="mt-1 text-3xl font-extrabold">15</div>
+            <div class="mt-1 text-3xl font-extrabold">10</div>
             <div class="text-gray-700 mt-1">Strike Distance</div>
           </div>
           <div class="rounded-lg border border-gray-200 p-4">
             <div class="text-sm uppercase tracking-wide text-gray-500">Weight</div>
-            <div class="mt-1 text-3xl font-extrabold">15</div>
+            <div class="mt-1 text-3xl font-extrabold">10</div>
             <div class="text-gray-700 mt-1">Days to Expiry (DTE)</div>
+          </div>
+          <div class="rounded-lg border border-gray-200 p-4">
+            <div class="text-sm uppercase tracking-wide text-gray-500">Weight</div>
+            <div class="mt-1 text-3xl font-extrabold">10</div>
+            <div class="text-gray-700 mt-1">Implied Volatility</div>
+          </div>
+          <div class="rounded-lg border border-gray-200 p-4">
+            <div class="text-sm uppercase tracking-wide text-gray-500">Weight</div>
+            <div class="mt-1 text-3xl font-extrabold">10</div>
+            <div class="text-gray-700 mt-1">Liquidity</div>
           </div>
         </div>
 
@@ -63,7 +73,22 @@ const pageDescription = 'How scores are calculated and key options-selling vocab
           </div>
           <div>
             <h3 class="font-semibold text-lg mb-2">DTE Score</h3>
-            <p class="text-gray-700">Peaks around 35 days and decays linearly within 30–40 DTE, with faster decay outside that range to reflect assignment and timing risk.</p>
+            <p class="text-gray-700">Peaks around 38 days and decays linearly within 30–45 DTE, with faster decay outside that range to reflect assignment and timing risk.</p>
+          </div>
+          <div>
+            <h3 class="font-semibold text-lg mb-2">Implied Volatility (IV) Score</h3>
+            <p class="text-gray-700">Rewards higher IV, as it leads to higher premiums.
+              The score is scaled, with the maximum score awarded to options with an IV of 75% or higher.</p>
+          </div>
+          <div>
+            <h3 class="font-semibold text-lg mb-2">Liquidity Score</h3>
+            <p class="text-gray-700">Combines open interest and volume to measure how easily an option can be traded.
+              Higher liquidity is better, and the score is calculated on a logarithmic scale.</p>
+          </div>
+          <div>
+            <h3 class="font-semibold text-lg mb-2">Bid-Ask Spread Penalty</h3>
+            <p class="text-gray-700">A penalty is subtracted from the total score if the bid-ask spread is wider than 10% of the ask price.
+              This penalizes illiquid options where slippage is likely.</p>
           </div>
         </div>
       </div>
@@ -143,6 +168,7 @@ const pageDescription = 'How scores are calculated and key options-selling vocab
         <li>Scores help compare opportunities, but they are not financial advice.</li>
         <li>Always consider liquidity, earnings dates, and personal risk tolerance.</li>
         <li>The model prioritizes premium and time decay; adjust to your strategy as needed.</li>
+        <li>IV and Liquidity are now included to give a more balanced view of risk and reward.</li>
       </ul>
     </section>
   </main>
@@ -151,5 +177,3 @@ const pageDescription = 'How scores are calculated and key options-selling vocab
     .container { max-width: 1100px; }
   </style>
 </Layout>
-
-

@@ -1,12 +1,49 @@
 ---
 import { PreferredStocks } from '../enums/preferredStocks';
 import StockOptionsSection from './stock_options_section.astro';
+import { OptionsService } from '../services/optionsService';
+import type { OptionData } from '../types/option';
 import '../styles/optionsTable.css';
 
-interface Props {}
+interface FetchedData {
+  options: OptionData[];
+  currentPrice: number;
+  error?: string;
+}
 
-const {} = Astro.props;
 const symbols = Object.values(PreferredStocks);
+const db = (Astro.locals.runtime?.env?.DB as D1Database) || null;
+let stocksData: { symbol: string; data: FetchedData }[] = [];
+
+if (db) {
+  const optionsService = OptionsService.getInstance(db);
+  const promises = symbols.map((symbol) => optionsService.fetchOptionsData(symbol));
+  const results = await Promise.allSettled(promises);
+
+  stocksData = results.map((result, index) => {
+    const symbol = symbols[index];
+    if (result.status === 'fulfilled') {
+      return { symbol, data: result.value };
+    }
+    return {
+      symbol,
+      data: {
+        options: [],
+        currentPrice: 0,
+        error: result.reason instanceof Error ? result.reason.message : 'Unknown error fetching data',
+      },
+    };
+  });
+} else {
+  stocksData = symbols.map((symbol) => ({
+    symbol,
+    data: {
+      options: [],
+      currentPrice: 0,
+      error: 'Database not available',
+    },
+  }));
+}
 ---
 
 <div class="preferred-stocks-container">
@@ -15,9 +52,11 @@ const symbols = Object.values(PreferredStocks);
   </div>
 
   <div class="grid gap-8" id="stocks-container">
-    {symbols.map((symbol) => (
-      <StockOptionsSection symbol={symbol} />
-    ))}
+    {
+      stocksData.map(({ symbol }) => (
+        <StockOptionsSection symbol={symbol} />
+      ))
+    }
   </div>
 </div>
 

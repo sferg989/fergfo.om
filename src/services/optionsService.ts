@@ -80,7 +80,7 @@ export class OptionsService {
       const currentPrice = baseData.quote?.regularMarketPrice ?? 0;
 
       // Get Friday expiration dates within 90 days
-      const fridayDates = this.getFridayExpirationDates(baseData.expirationDates);
+      const fridayDates = this.getFridayExpirationDates();
       
       // Fetch options data for each Friday expiration date
       const allOptions: OptionData[] = [];
@@ -137,7 +137,7 @@ export class OptionsService {
     }
   }
 
-  private getFridayExpirationDates(expirationDates: Date[]): Date[] {
+  private getFridayExpirationDates(): Date[] {
     const today = new Date();
     
     // Find the next Friday
