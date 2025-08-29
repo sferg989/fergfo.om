@@ -1,0 +1,32 @@
+# Wrangler configuration for background refresh worker
+name = "fergfo-background-refresh"
+main = "src/workers/background_refresh.ts"
+compatibility_date = "2025-01-10"
+compatibility_flags = ["nodejs_compat"]
+
+# Cron trigger - runs every minute during market hours
+# This will run every minute, but the worker itself checks market hours
+[triggers]
+crons = ["* * * * *"]
+
+# Production environment
+[env.production]
+# Database binding for production
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "options-tracker"
+database_id = "06cd1245-d0de-4491-be4b-4f1e7c2de1f3"
+
+# Development environment  
+[env.development]
+# Database binding for development
+[[env.development.d1_databases]]
+binding = "DB"
+database_name = "options-tracker-local"
+database_id = "a89f41ce-342e-4711-8aec-ab0d6f8fdaca"
+
+# Default environment (development)
+[[d1_databases]]
+binding = "DB"
+database_name = "options-tracker-local"
+database_id = "a89f41ce-342e-4711-8aec-ab0d6f8fdaca"

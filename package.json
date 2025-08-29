@@ -10,7 +10,12 @@
     "lint": "eslint --fix \"src/**/*.{js,ts,jsx,tsx,astro}\"",
     "all": "astro check && eslint --fix \"src/**/*.{js,ts,jsx,tsx,astro}\"",
     "astro:check": "astro check",
-    "astro": "astro"
+    "astro": "astro",
+    "worker:dev": "wrangler dev --config wrangler.background.toml",
+    "worker:deploy": "wrangler deploy --config wrangler.background.toml",
+    "worker:deploy:prod": "wrangler deploy --config wrangler.background.toml --env production",
+    "db:migrate": "wrangler d1 migrations apply options-tracker-local --local",
+    "db:migrate:prod": "wrangler d1 migrations apply options-tracker --env production"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.4",

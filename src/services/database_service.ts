@@ -299,6 +299,34 @@ export class DatabaseService {
   }
 
   /**
+   * Add a symbol to the tracking table for background refresh
+   */
+  async addSymbolToTracking(symbol: string, isPreferred: boolean = false): Promise<void> {
+    const now = new Date().toISOString();
+    const id = `${isPreferred ? 'preferred' : 'user'}_${symbol.toLowerCase()}`;
+    
+    try {
+      await this.db.prepare(`
+        INSERT OR IGNORE INTO symbol_tracking 
+        (id, symbol, is_preferred, priority, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 1, ?, ?)
+      `).bind(
+        id, 
+        symbol.toUpperCase(), 
+        isPreferred ? 1 : 0, 
+        isPreferred ? 10 : 5, // Preferred symbols get higher priority
+        now, 
+        now
+      ).run();
+      
+      console.log(`Added ${symbol} to tracking (preferred: ${isPreferred})`);
+    } catch (error) {
+      console.error(`Error adding symbol ${symbol} to tracking:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Get performance summary for a symbol
    */
   async getStockPerformanceData(symbol: string, days: number = 30): Promise<StockPerformanceData> {

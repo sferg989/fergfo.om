@@ -75,6 +75,105 @@ export class OptionsService {
 
   async fetchOptionsData(symbol: string): Promise<{ options: OptionData[]; currentPrice: number; error?: string }> {
     try {
+      // Add symbol to tracking if database is available (for background refresh)
+      if (this.dbService) {
+        try {
+          await this.addSymbolToTracking(symbol);
+        } catch (trackingError) {
+          console.warn(`Failed to add ${symbol} to tracking:`, trackingError);
+          // Continue with data fetch even if tracking fails
+        }
+
+        const cachedData = await this.getLatestOptionsFromDB(symbol);
+        if (cachedData.options.length > 0) {
+          console.log(`Returning cached data for ${symbol} from ${cachedData.fetchedAt}`);
+          return cachedData;
+        }
+        console.log(`No cached data found for ${symbol}, database refresh will handle this`);
+      }
+
+      // If no cached data or no database, return empty with message
+      return { 
+        options: [], 
+        currentPrice: 0, 
+        error: `No cached data available for ${symbol}. Data will be available shortly via background refresh.` 
+      };
+    } catch (error) {
+      console.error('Error fetching options data:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return { 
+        options: [], 
+        currentPrice: 0, 
+        error: `Failed to fetch options data: ${errorMessage}` 
+      };
+    }
+  }
+
+  /**
+   * Add a searched symbol to the tracking table for background refresh
+   */
+  private async addSymbolToTracking(symbol: string): Promise<void> {
+    if (!this.dbService) {
+      return;
+    }
+    
+    try {
+      await this.dbService.addSymbolToTracking(symbol, false);
+    } catch (error) {
+      console.error(`Error adding ${symbol} to tracking:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get the latest options data from database for a symbol
+   */
+  private async getLatestOptionsFromDB(symbol: string): Promise<{ options: OptionData[]; currentPrice: number; fetchedAt: string }> {
+    if (!this.dbService) {
+      throw new Error('Database service not available');
+    }
+
+    // Get the most recent snapshot for this symbol
+    const snapshots = await this.dbService.getRecentSnapshots(symbol, 1);
+    if (snapshots.length === 0) {
+      return { options: [], currentPrice: 0, fetchedAt: '' };
+    }
+
+    const latestSnapshot = snapshots[0];
+    
+    // Get options for this snapshot
+    const optionsData = await this.dbService.getOptionsForSnapshot(latestSnapshot.id);
+    
+    // Transform historical data back to OptionData format
+    const options: OptionData[] = optionsData.map(opt => ({
+      contractName: opt.contractName,
+      strike: opt.strike,
+      lastPrice: opt.lastPrice,
+      bid: opt.bid,
+      ask: opt.ask,
+      volume: opt.volume,
+      openInterest: opt.openInterest,
+      expirationDate: opt.expirationDate,
+      impliedVolatility: opt.impliedVolatility,
+      delta: opt.delta,
+      gamma: opt.gamma,
+      theta: opt.theta
+    }));
+
+    return {
+      options,
+      currentPrice: latestSnapshot.currentPrice,
+      fetchedAt: latestSnapshot.fetchedAt
+    };
+  }
+
+  /**
+   * Fetch fresh data from external API (for background refresh only)
+   */
+  async fetchFreshOptionsData(symbol: string): Promise<{ options: OptionData[]; currentPrice: number; error?: string }> {
+    try {
+      console.log(`Fetching fresh data for ${symbol} from external API`);
+      
       // Get base options data to retrieve current price and available expiration dates
       const baseData = await YahooFinance.options(symbol, { formatted: true });
       const currentPrice = baseData.quote?.regularMarketPrice ?? 0;
@@ -119,20 +218,21 @@ export class OptionsService {
             allOptions,
             scores
           );
+          console.log(`Saved fresh data for ${symbol} to database`);
         } catch (dbError) {
           console.error('Failed to save to database:', dbError);
-          // Continue execution even if database save fails
+          throw dbError; // Re-throw for background worker to handle
         }
       }
 
       return { options: allOptions, currentPrice };
     } catch (error) {
-      console.error('Error fetching options data:', error);
+      console.error('Error fetching fresh options data:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return { 
         options: [], 
         currentPrice: 0, 
-        error: `Failed to fetch options data: ${errorMessage}` 
+        error: `Failed to fetch fresh options data: ${errorMessage}` 
       };
     }
   }
