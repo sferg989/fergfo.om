@@ -139,7 +139,7 @@ export class BackgroundRefreshService {
       // Successful refresh - update tracking
       await this.updateSymbolTracking(symbol, {
         last_refreshed_at: now,
-        last_error: null,
+        last_error: undefined,
         error_count: 0,
         updated_at: now
       });
