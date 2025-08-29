@@ -8,6 +8,14 @@
 			"label": "npm: all",
 			"detail": "astro check && eslint --fix \"src/**/*.{js,ts,jsx,tsx,astro}\"",
 			
+		},
+		{
+			"type": "shell",
+			"command": "export NVM_DIR=\"$HOME/.nvm\" && source \"$NVM_DIR/nvm.sh\" && nvm use && npm run all && git add . && git commit --amend --no-edit && git push --force",
+			"problemMatcher": [],
+			"label": "lint-commit-push",
+			"detail": "Run linting, amend previous commit, and force push",
+			
 		}
 	]
 }
