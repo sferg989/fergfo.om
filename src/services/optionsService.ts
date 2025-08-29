@@ -246,7 +246,7 @@ export class OptionsService {
     
     // Generate the next 5 Fridays
     const fridayDates: Date[] = [];
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 15; i++) {
       let fridayDate = new Date(nextFriday.getTime() + (i * 7 * 24 * 60 * 60 * 1000));
       fridayDate = new Date(fridayDate.toISOString().split('T')[0]);
       fridayDates.push(fridayDate);

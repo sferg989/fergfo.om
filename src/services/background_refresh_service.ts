@@ -122,19 +122,19 @@ export class BackgroundRefreshService {
       console.log(`Starting refresh for symbol: ${symbol}`);
       
       // Fetch fresh data from external API
-      // const result = await this.optionsService.fetchFreshOptionsData(symbol);
+      const result = await this.optionsService.fetchFreshOptionsData(symbol);
       
-      // if (result.error) {
-      //   // Update symbol tracking with error
-      //   await this.updateSymbolTracking(symbol, {
-      //     last_error: result.error,
-      //     error_count: await this.incrementErrorCount(symbol),
-      //     updated_at: now
-      //   });
+      if (result.error) {
+        // Update symbol tracking with error
+        await this.updateSymbolTracking(symbol, {
+          last_error: result.error,
+          error_count: await this.incrementErrorCount(symbol),
+          updated_at: now
+        });
         
-      //   console.error(`Failed to refresh ${symbol}: ${result.error}`);
-      //   return { success: false, error: result.error };
-      // }
+        console.error(`Failed to refresh ${symbol}: ${result.error}`);
+        return { success: false, error: result.error };
+      }
 
       // Successful refresh - update tracking
       await this.updateSymbolTracking(symbol, {
