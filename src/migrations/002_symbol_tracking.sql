@@ -2,7 +2,7 @@
 -- This adds tables to track which symbols to refresh and their refresh state
 
 -- Symbol tracking table - manages which symbols to refresh and their priority
-CREATE TABLE symbol_tracking (
+CREATE TABLE IF NOT EXISTS symbol_tracking (
     id TEXT PRIMARY KEY,
     symbol TEXT NOT NULL UNIQUE,
     is_preferred BOOLEAN NOT NULL DEFAULT 0, -- 1 for preferred stocks, 0 for user-searched
@@ -16,13 +16,13 @@ CREATE TABLE symbol_tracking (
 );
 
 -- Indexes for efficient querying
-CREATE INDEX idx_symbol_tracking_symbol ON symbol_tracking(symbol);
-CREATE INDEX idx_symbol_tracking_priority ON symbol_tracking(priority DESC);
-CREATE INDEX idx_symbol_tracking_last_refreshed ON symbol_tracking(last_refreshed_at);
-CREATE INDEX idx_symbol_tracking_active_priority ON symbol_tracking(is_active, priority DESC);
+CREATE INDEX IF NOT EXISTS idx_symbol_tracking_symbol ON symbol_tracking(symbol);
+CREATE INDEX IF NOT EXISTS idx_symbol_tracking_priority ON symbol_tracking(priority DESC);
+CREATE INDEX IF NOT EXISTS idx_symbol_tracking_last_refreshed ON symbol_tracking(last_refreshed_at);
+CREATE INDEX IF NOT EXISTS idx_symbol_tracking_active_priority ON symbol_tracking(is_active, priority DESC);
 
 -- Refresh state table - tracks the current state of the background refresh process
-CREATE TABLE refresh_state (
+CREATE TABLE IF NOT EXISTS refresh_state (
     id TEXT PRIMARY KEY,
     last_symbol_refreshed TEXT, -- Symbol that was last processed
     current_position INTEGER NOT NULL DEFAULT 0, -- Current position in round-robin
@@ -35,10 +35,11 @@ CREATE TABLE refresh_state (
 );
 
 -- Single row to track refresh state
-INSERT INTO refresh_state (id, current_position, total_symbols) 
+INSERT OR IGNORE INTO refresh_state (id, current_position, total_symbols) 
 VALUES ('main', 0, 0);
 
 -- View to get next symbol to refresh (round-robin)
+DROP VIEW IF EXISTS next_symbol_to_refresh;
 CREATE VIEW next_symbol_to_refresh AS
 SELECT 
     st.symbol,
@@ -51,6 +52,7 @@ WHERE st.is_active = 1
 ORDER BY st.priority DESC, st.symbol;
 
 -- View to get refresh statistics
+DROP VIEW IF EXISTS refresh_statistics;
 CREATE VIEW refresh_statistics AS
 SELECT 
     COUNT(*) as total_symbols,

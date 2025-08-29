@@ -3,7 +3,7 @@
 -- option data, and calculated scores over time.
 
 -- Stock snapshots table - stores stock price and metadata at each fetch
-CREATE TABLE stock_snapshots (
+CREATE TABLE IF NOT EXISTS stock_snapshots (
     id TEXT PRIMARY KEY,
     symbol TEXT NOT NULL,
     current_price REAL NOT NULL,
@@ -15,12 +15,12 @@ CREATE TABLE stock_snapshots (
     CONSTRAINT unique_symbol_fetch UNIQUE (symbol, fetched_at)
 );
 
-CREATE INDEX idx_stock_snapshots_symbol ON stock_snapshots(symbol);
-CREATE INDEX idx_stock_snapshots_created_at ON stock_snapshots(created_at);
-CREATE INDEX idx_stock_snapshots_symbol_created ON stock_snapshots(symbol, created_at);
+CREATE INDEX IF NOT EXISTS idx_stock_snapshots_symbol ON stock_snapshots(symbol);
+CREATE INDEX IF NOT EXISTS idx_stock_snapshots_created_at ON stock_snapshots(created_at);
+CREATE INDEX IF NOT EXISTS idx_stock_snapshots_symbol_created ON stock_snapshots(symbol, created_at);
 
 -- Option snapshots table - stores individual option data for each stock snapshot
-CREATE TABLE option_snapshots (
+CREATE TABLE IF NOT EXISTS option_snapshots (
     id TEXT PRIMARY KEY,
     snapshot_id TEXT NOT NULL, -- foreign key to stock_snapshots
     contract_name TEXT NOT NULL,
@@ -40,13 +40,13 @@ CREATE TABLE option_snapshots (
     FOREIGN KEY (snapshot_id) REFERENCES stock_snapshots(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_option_snapshots_snapshot_id ON option_snapshots(snapshot_id);
-CREATE INDEX idx_option_snapshots_contract_name ON option_snapshots(contract_name);
-CREATE INDEX idx_option_snapshots_expiration ON option_snapshots(expiration_date);
-CREATE INDEX idx_option_snapshots_strike ON option_snapshots(strike);
+CREATE INDEX IF NOT EXISTS idx_option_snapshots_snapshot_id ON option_snapshots(snapshot_id);
+CREATE INDEX IF NOT EXISTS idx_option_snapshots_contract_name ON option_snapshots(contract_name);
+CREATE INDEX IF NOT EXISTS idx_option_snapshots_expiration ON option_snapshots(expiration_date);
+CREATE INDEX IF NOT EXISTS idx_option_snapshots_strike ON option_snapshots(strike);
 
 -- Option score snapshots table - stores calculated scores for each option
-CREATE TABLE option_score_snapshots (
+CREATE TABLE IF NOT EXISTS option_score_snapshots (
     id TEXT PRIMARY KEY,
     option_snapshot_id TEXT NOT NULL, -- foreign key to option_snapshots
     total_score REAL NOT NULL,
@@ -60,10 +60,11 @@ CREATE TABLE option_score_snapshots (
     CONSTRAINT unique_option_score UNIQUE (option_snapshot_id)
 );
 
-CREATE INDEX idx_option_score_snapshots_option_id ON option_score_snapshots(option_snapshot_id);
-CREATE INDEX idx_option_score_snapshots_total_score ON option_score_snapshots(total_score);
+CREATE INDEX IF NOT EXISTS idx_option_score_snapshots_option_id ON option_score_snapshots(option_snapshot_id);
+CREATE INDEX IF NOT EXISTS idx_option_score_snapshots_total_score ON option_score_snapshots(total_score);
 
 -- Create a view for easy querying of complete option data with scores
+DROP VIEW IF EXISTS option_data_with_scores;
 CREATE VIEW option_data_with_scores AS
 SELECT 
     ss.symbol,
@@ -94,6 +95,7 @@ LEFT JOIN option_score_snapshots oss ON os.id = oss.option_snapshot_id
 ORDER BY ss.created_at DESC, oss.total_score DESC;
 
 -- Create a view for performance tracking over time
+DROP VIEW IF EXISTS stock_performance_summary;
 CREATE VIEW stock_performance_summary AS
 SELECT 
     ss.symbol,

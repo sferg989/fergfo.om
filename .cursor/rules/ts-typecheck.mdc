@@ -1,0 +1,19 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+
+
+- When creating a new type, interface, or class:
+  - BEFORE creating it, the AI must search the codebase for **similar structures**, not just names.
+  - Run a structural search, e.g.:
+    - `rg "interface " .`
+    - `rg "type " .`
+  - Compare the fields/properties of the intended new type with existing ones.
+  - If an existing type/interface has the same or overlapping structure, reuse, import, or extend it instead of creating a duplicate.
+  - Only create a new type when no equivalent structure exists.
+
+- File naming rules:
+  - All new files must use **camelCase**.
+  - Never use `-` (kebab-case) or `_` (snake_case) in file names.

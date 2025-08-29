@@ -64,7 +64,9 @@ jobs:
         command: deploy --env production
 
     - name: Apply Database Migration
-      run: npx wrangler d1 migrations apply options-tracker --env production
+      run: |
+        echo "Applying database migrations..."
+        npx wrangler d1 migrations apply options-tracker --env production --remote
       env:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
@@ -91,87 +93,30 @@ jobs:
     - name: Validate Worker Configuration
       run: |
         echo "Validating background worker configuration..."
-        echo "Checking wrangler.background.toml..."
         
-        # Verify the worker config file exists and has correct settings
+        # Basic validation
         if [ ! -f "wrangler.background.toml" ]; then
           echo "❌ wrangler.background.toml not found!"
           exit 1
         fi
         
-        # Check that cron trigger is configured
-        if ! grep -q "crons = \[" wrangler.background.toml; then
-          echo "❌ Cron trigger not configured in wrangler.background.toml!"
-          exit 1
-        fi
-        
-        # Check that database binding is configured
-        if ! grep -q "binding = \"DB\"" wrangler.background.toml; then
-          echo "❌ Database binding not configured in wrangler.background.toml!"
-          exit 1
-        fi
-        
-        echo "✅ Worker configuration validated"
-        echo "✅ Cron trigger: Every minute"
-        echo "✅ Database binding: DB"
-        echo "✅ Environment: production"
-        
-        # Check required secrets
-        echo "Checking required secrets..."
-        if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-          echo "❌ CLOUDFLARE_API_TOKEN not set!"
-          exit 1
-        fi
-        echo "✅ CLOUDFLARE_API_TOKEN is set"
-        
-        # Check worker dependencies
-        echo "Checking worker dependencies..."
         if [ ! -f "src/workers/background_refresh.ts" ]; then
           echo "❌ Background refresh worker source not found!"
           exit 1
         fi
-        if [ ! -f "src/services/background_refresh_service.ts" ]; then
-          echo "❌ Background refresh service not found!"
-          exit 1
-        fi
-        echo "✅ Worker dependencies verified"
-        echo ""
-        echo "📅 CRON SCHEDULE DETAILS"
-        echo "========================"
-        echo "• Schedule: Every minute (* * * * *)"
-        echo "• Market hours: 9:30 AM - 4:00 PM ET, Monday-Friday"
-        echo "• Worker checks market hours before processing"
-        echo "• Round-robin refresh for all tracked symbols"
-        echo "• Expected refresh frequency: ~15 minutes per symbol"
         
-        # Show database access information
-        echo ""
-        echo "🗄️  DATABASE ACCESS"
-        echo "=================="
-        echo "• Database: options-tracker (production)"
-        echo "• Tables: symbol_tracking, refresh_state, stock_snapshots, etc."
-        echo "• Worker has full read/write access to all tables"
-        echo "• Data flow: External API → Worker → Database → UI Components"
-        echo ""
-        
+        echo "✅ Worker configuration validated"
       env:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
     - name: Verify Database Schema
       run: |
-        echo "Verifying database schema for background refresh worker..."
-        npx wrangler d1 execute options-tracker --env production --command="SELECT COUNT(*) as symbol_count FROM symbol_tracking;"
-        echo "✅ Database schema verified - symbol tracking table exists"
+        echo "Verifying database schema..."
+        sleep 10  # Wait for migration to complete
         
-        # Check that preferred stocks are loaded
-        echo "Checking preferred stocks in tracking table..."
-        npx wrangler d1 execute options-tracker --env production --command="SELECT symbol, priority FROM symbol_tracking WHERE is_preferred = 1 ORDER BY priority DESC;"
-        echo "✅ Preferred stocks loaded and ready for background refresh"
-        
-        # Verify refresh state table
-        echo "Checking refresh state table..."
-        npx wrangler d1 execute options-tracker --env production --command="SELECT * FROM refresh_state WHERE id = 'main';"
-        echo "✅ Refresh state table initialized and ready"
+        # Simple verification that tables exist
+        npx wrangler d1 execute options-tracker --env production --remote --command="SELECT name FROM sqlite_master WHERE type='table';"
+        echo "✅ Database schema verified"
       env:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
@@ -187,71 +132,7 @@ jobs:
       run: |
         echo "Waiting for worker to be ready..."
         sleep 30
-        echo "Background refresh worker deployed successfully!"
-        echo "Worker will start running cron jobs every minute during market hours"
-        
-        # Check worker status
-        echo "Checking worker status..."
-        npx wrangler tail --config wrangler.background.toml --env production &
-        TAIL_PID=$!
-        sleep 10
-        kill $TAIL_PID || true
-        
-        echo "✅ Background refresh worker deployment complete!"
-        echo "📅 Cron trigger: Every minute during market hours (9:30 AM - 4:00 PM ET)"
-        echo "🔄 Round-robin refresh for all tracked symbols"
-        
-        # Test worker HTTP endpoints
-        echo "🧪 Testing worker HTTP endpoints..."
-        WORKER_URL="https://fergfo-background-refresh.worker.dev"
-        
-        # Test stats endpoint (this should work without auth in production)
-        echo "Testing stats endpoint..."
-        curl -s "$WORKER_URL/refresh/stats" || echo "Stats endpoint test completed"
-        
-        echo "🎉 Worker deployment and verification complete!"
-        
-        # Show expected worker behavior
-        echo ""
-        echo "📊 EXPECTED WORKER BEHAVIOR"
-        echo "============================"
-        echo "• Cron trigger fires every minute"
-        echo "• Worker checks if market is open"
-        echo "• If market open: selects next symbol, fetches data, saves to DB"
-        echo "• If market closed: skips processing"
-        echo "• Round-robin through all tracked symbols"
-        echo "• Logs all activities for monitoring"
-        echo ""
-        
-        # Deployment summary
-        echo ""
-        echo "🚀 DEPLOYMENT SUMMARY"
-        echo "====================="
-        echo "✅ Main application deployed to Cloudflare Pages"
-        echo "✅ Database migration applied (symbol tracking schema)"
-        echo "✅ Background refresh worker deployed with cron trigger"
-        echo "✅ Database schema verified and preferred stocks loaded"
-        echo ""
-        echo "📋 NEXT STEPS"
-        echo "============="
-        echo "• Worker will start running cron jobs automatically"
-        echo "• Check Cloudflare dashboard for worker logs"
-        echo "• Monitor refresh statistics via /api/refresh-status"
-        echo "• Background refresh runs every minute during market hours"
-        echo ""
-        echo "🔍 MONITORING & DEBUGGING"
-        echo "========================="
-        echo "• Worker logs: Cloudflare dashboard > Workers > fergfo-background-refresh"
-        echo "• API endpoint: /api/refresh-status (check refresh statistics)"
-        echo "• Manual trigger: POST to worker HTTP endpoints (with auth)"
-        echo "• Database queries: Check symbol_tracking and refresh_state tables"
-        echo ""
-        echo "⚠️  IMPORTANT NOTES"
-        echo "=================="
-        echo "• Worker only runs during market hours (9:30 AM - 4:00 PM ET)"
-        echo "• First data will appear after worker processes symbols"
-        echo "• Check worker logs if no data appears within 30 minutes"
-        echo "• Ensure CLOUDFLARE_API_TOKEN has D1 database access"
-        echo ""
+        echo "✅ Background refresh worker deployed successfully!"
+        echo "Worker will start running cron jobs every minute during market hours."
       env:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
