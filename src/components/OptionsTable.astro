@@ -15,7 +15,7 @@ const { symbol } = Astro.props;
 // Get D1 database from runtime if available
 const db = (Astro.locals.runtime?.env?.DB as D1Database) || null;
 const optionsService = OptionsService.getInstance(db);
-const { options, currentPrice, error } = await optionsService.fetchOptionsData(symbol);
+const { options, currentPrice, fetchedAt, error } = await optionsService.fetchOptionsData(symbol);
 
 const sortedGroups = groupOptionsByExpiry(options);
 
@@ -37,6 +37,11 @@ const sortedGroups = groupOptionsByExpiry(options);
           <span class="price-range">
             Range: ${(currentPrice * 0.9).toFixed(2)} - ${(currentPrice * 1.1).toFixed(2)}
           </span>
+          {fetchedAt && (
+            <span class="last-updated">
+              Last updated: {new Date(fetchedAt).toLocaleString()}
+            </span>
+          )}
         </div>
       </div>
       {options.length > 0 && (
@@ -80,6 +85,12 @@ const sortedGroups = groupOptionsByExpiry(options);
   .price-range {
     font-size: 0.875rem;
     color: #4b5563;
+  }
+
+  .last-updated {
+    font-size: 0.75rem;
+    color: #6b7280;
+    font-style: italic;
   }
 
   .refresh-button {

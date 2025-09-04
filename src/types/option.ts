@@ -41,5 +41,6 @@ export interface StockOptionsData {
   symbol: string;
   options: OptionData[];
   currentPrice: number;
+  fetchedAt?: string;
   error?: string;
 } 

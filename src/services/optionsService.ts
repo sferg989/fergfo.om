@@ -73,7 +73,7 @@ export class OptionsService {
     }
   }
 
-  async fetchOptionsData(symbol: string): Promise<{ options: OptionData[]; currentPrice: number; error?: string }> {
+  async fetchOptionsData(symbol: string): Promise<{ options: OptionData[]; currentPrice: number; fetchedAt?: string; error?: string }> {
     try {
       // Add symbol to tracking if database is available (for background refresh)
       if (this.dbService) {
@@ -87,7 +87,11 @@ export class OptionsService {
         const cachedData = await this.getLatestOptionsFromDB(symbol);
         if (cachedData.options.length > 0) {
           console.log(`Returning cached data for ${symbol} from ${cachedData.fetchedAt}`);
-          return cachedData;
+          return {
+            options: cachedData.options,
+            currentPrice: cachedData.currentPrice,
+            fetchedAt: cachedData.fetchedAt
+          };
         }
         console.log(`No cached data found for ${symbol}, database refresh will handle this`);
       }
@@ -96,6 +100,7 @@ export class OptionsService {
       return { 
         options: [], 
         currentPrice: 0, 
+        fetchedAt: undefined,
         error: `No cached data available for ${symbol}. Data will be available shortly via background refresh.` 
       };
     } catch (error) {
@@ -104,6 +109,7 @@ export class OptionsService {
       return { 
         options: [], 
         currentPrice: 0, 
+        fetchedAt: undefined,
         error: `Failed to fetch options data: ${errorMessage}` 
       };
     }
@@ -170,7 +176,7 @@ export class OptionsService {
   /**
    * Fetch fresh data from external API (for background refresh only)
    */
-  async fetchFreshOptionsData(symbol: string): Promise<{ options: OptionData[]; currentPrice: number; error?: string }> {
+  async fetchFreshOptionsData(symbol: string): Promise<{ options: OptionData[]; currentPrice: number; fetchedAt?: string; error?: string }> {
     try {
       console.log(`Fetching fresh data for ${symbol} from external API`);
       
@@ -225,13 +231,18 @@ export class OptionsService {
         }
       }
 
-      return { options: allOptions, currentPrice };
+      return { 
+        options: allOptions, 
+        currentPrice, 
+        fetchedAt: new Date().toISOString() 
+      };
     } catch (error) {
       console.error('Error fetching fresh options data:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return { 
         options: [], 
         currentPrice: 0, 
+        fetchedAt: undefined,
         error: `Failed to fetch fresh options data: ${errorMessage}` 
       };
     }
