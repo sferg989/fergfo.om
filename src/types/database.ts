@@ -62,8 +62,24 @@ export interface StockPerformanceData {
   symbol: string;
   snapshots: Array<{
     date: string;
-    currentPrice: number;
+    avgPrice: number;
+    lowPrice: number;
+    highPrice: number;
     topOptionScore: number;
-    optionCount: number;
+    avgOptionScore: number;
+    uniqueOptionsCount: number;
+    snapshotCount: number;
   }>;
+}
+
+export interface TopPerformingOption {
+  strike: number;
+  expirationDate: string;
+  totalScore: number;
+  avgPrice: number;
+  maxVolume: number;
+  maxOpenInterest: number;
+  bestBid: number;
+  bestAsk: number;
+  snapshotCount: number;
 }

@@ -1,5 +1,6 @@
 ---
 import { OptionsService } from '../services/optionsService';
+import { getRelativeTime, calculatePriceChange, formatPriceChange } from '../utils/timeUtils';
 
 interface Props {
   symbol: string;
@@ -63,12 +64,36 @@ if (db) {
           <p class="text-red-500">Error: {snapshotsData.error}</p>
         ) : snapshotsData.snapshots.length > 0 ? (
           <div>
-            {snapshotsData.snapshots.map((snapshot) => (
-              <div class="snapshot-item">
-                <div class="font-medium">${snapshot.currentPrice.toFixed(2)}</div>
-                <div class="text-sm text-gray-600">{new Date(snapshot.fetchedAt).toLocaleString()}</div>
-              </div>
-            ))}
+            {snapshotsData.snapshots.map((snapshot, index) => {
+              const prevSnapshot = snapshotsData.snapshots[index + 1];
+              const priceChangeData = prevSnapshot
+                ? calculatePriceChange(snapshot.currentPrice, prevSnapshot.currentPrice)
+                : null;
+              const changeFormatted = priceChangeData
+                ? formatPriceChange(priceChangeData.change, priceChangeData.changePercent)
+                : null;
+
+              return (
+                <div class="snapshot-item">
+                  <div class="flex justify-between items-center">
+                    <div class="font-medium">${snapshot.currentPrice.toFixed(2)}</div>
+                    {changeFormatted && (
+                      <div class={changeFormatted.className + ' text-sm font-medium'}>
+                        {changeFormatted.text}
+                      </div>
+                    )}
+                  </div>
+                  <div class="text-sm text-gray-600">
+                    {getRelativeTime(snapshot.fetchedAt)}
+                    {'snapshotCount' in snapshot && snapshot.snapshotCount > 1 && (
+                      <span class="ml-2 text-xs bg-gray-100 px-2 py-1 rounded">
+                        {snapshot.snapshotCount} snapshots
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <p class="text-gray-500">No historical data available</p>
@@ -87,8 +112,15 @@ if (db) {
             {topOptionsData.topOptions.map((option) => (
               <div class="option-item">
                 <div class="font-medium">${option.strike} Strike</div>
-                <div class="text-sm text-blue-600">Score: {option.score?.totalScore?.toFixed(1) || 'N/A'}</div>
-                <div class="text-xs text-gray-600">{new Date(option.expirationDate).toLocaleDateString()}</div>
+                <div class="text-sm text-blue-600">
+                  Max Score: {option.totalScore?.toFixed(1) || 'N/A'}
+                </div>
+                <div class="text-xs text-gray-600">
+                  {new Date(option.expirationDate).toLocaleDateString()}
+                </div>
+                <div class="text-xs text-gray-500">
+                  Seen {option.snapshotCount || 1} times
+                </div>
               </div>
             ))}
           </div>
@@ -105,22 +137,21 @@ if (db) {
         {performanceData.error ? (
           <p class="text-red-500">Error: {performanceData.error}</p>
         ) : performanceData.snapshots.length > 0 ? (
-          <div>
-            <div class="text-sm text-gray-600 mb-2">Last 30 days performance summary:</div>
-            <div class="grid grid-cols-3 gap-4 text-center">
-              <div class="bg-blue-50 p-3 rounded">
-                <div class="text-lg font-bold text-blue-600">{performanceData.snapshots.length}</div>
-                <div class="text-xs text-gray-600">Data Points</div>
+          <div class="grid grid-cols-3 gap-4">
+            {performanceData.snapshots.map((day) => (
+              <div class="day-summary">
+                <div class="text-sm font-medium">{day.date}</div>
+                <div class="text-xs">
+                  Price: ${day.lowPrice.toFixed(2)} - ${day.highPrice.toFixed(2)}
+                </div>
+                <div class="text-xs text-blue-600">
+                  Avg Score: {day.avgOptionScore?.toFixed(1) || 'N/A'}
+                </div>
+                <div class="text-xs text-gray-500">
+                  {day.uniqueOptionsCount} options analyzed
+                </div>
               </div>
-              <div class="bg-green-50 p-3 rounded">
-                <div class="text-lg font-bold text-green-600">{performanceData.snapshots[0]?.topOptionScore?.toFixed(1) || 'N/A'}</div>
-                <div class="text-xs text-gray-600">Latest Top Score</div>
-              </div>
-              <div class="bg-purple-50 p-3 rounded">
-                <div class="text-lg font-bold text-purple-600">${performanceData.snapshots[0]?.currentPrice?.toFixed(2) || 'N/A'}</div>
-                <div class="text-xs text-gray-600">Latest Price</div>
-              </div>
-            </div>
+            ))}
           </div>
         ) : (
           <p class="text-gray-500">No performance data available</p>

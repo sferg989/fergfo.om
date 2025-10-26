@@ -2,7 +2,8 @@ import type {
   StockSnapshot,
   CreateStockSnapshotParams,
   HistoricalOptionData,
-  StockPerformanceData
+  StockPerformanceData,
+  TopPerformingOption
 } from '../types/database';
 import type { OptionData, OptionScore } from '../types/option';
 
@@ -152,9 +153,17 @@ export class DatabaseService {
    */
   async getRecentSnapshots(symbol: string, limit: number = 10): Promise<StockSnapshot[]> {
     const stmt = this.db.prepare(`
-      SELECT * FROM stock_snapshots 
-      WHERE symbol = ? 
-      ORDER BY created_at DESC 
+      SELECT 
+        ss.id,
+        ss.symbol,
+        ss.current_price,
+        MAX(ss.fetched_at) as fetched_at,
+        ss.source,
+        COUNT(*) as snapshot_count
+      FROM stock_snapshots ss
+      WHERE ss.symbol = ?
+      GROUP BY DATE(ss.created_at), ROUND(ss.current_price, 0)
+      ORDER BY MAX(ss.created_at) DESC
       LIMIT ?
     `);
     
@@ -236,66 +245,33 @@ export class DatabaseService {
     symbol: string,
     days: number = 30,
     limit: number = 10
-  ): Promise<HistoricalOptionData[]> {
+  ): Promise<TopPerformingOption[]> {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - days);
-    
+
     const stmt = this.db.prepare(`
       SELECT 
-        os.*,
-        ss.symbol, ss.current_price, ss.fetched_at, ss.source,
-        oss.total_score, oss.premium_score, oss.theta_score, 
-        oss.strike_score, oss.dte_score
+        os.strike,
+        os.expiration_date,
+        MAX(oss.total_score) as total_score,
+        AVG(os.last_price) as avg_price,
+        MAX(os.volume) as max_volume,
+        MAX(os.open_interest) as max_open_interest,
+        MIN(os.bid) as best_bid,
+        MAX(os.ask) as best_ask,
+        COUNT(*) as snapshot_count
       FROM option_snapshots os
       JOIN stock_snapshots ss ON os.snapshot_id = ss.id
       JOIN option_score_snapshots oss ON os.id = oss.option_snapshot_id
       WHERE ss.symbol = ? AND ss.created_at >= ?
-      ORDER BY oss.total_score DESC
+      GROUP BY os.strike, os.expiration_date
+      ORDER BY MAX(oss.total_score) DESC
       LIMIT ?
     `);
-    
-    const result = await stmt.bind(
-      symbol.toUpperCase(),
-      cutoffDate.toISOString(),
-      limit
-    ).all();
-    
-    return result.results.map((row: unknown) => {
-      const r = row as Record<string, unknown>;
-      return {
-        id: r.id as string,
-        snapshotId: r.snapshot_id as string,
-        contractName: r.contract_name as string,
-        strike: r.strike as number,
-        lastPrice: r.last_price as number,
-        bid: r.bid as number,
-        ask: r.ask as number,
-        volume: r.volume as number,
-        openInterest: r.open_interest as number,
-        expirationDate: r.expiration_date as string,
-        impliedVolatility: r.implied_volatility as number,
-        delta: r.delta as number | undefined,
-        gamma: r.gamma as number | undefined,
-        theta: r.theta as number | undefined,
-        createdAt: r.created_at as string,
-        stockSnapshot: {
-          id: r.snapshot_id as string,
-          symbol: r.symbol as string,
-          currentPrice: r.current_price as number,
-          fetchedAt: r.fetched_at as string,
-          source: r.source as string
-        },
-        score: {
-          id: '',
-          optionSnapshotId: r.id as string,
-          totalScore: r.total_score as number,
-          premiumScore: r.premium_score as number,
-          thetaScore: r.theta_score as number,
-          strikeScore: r.strike_score as number,
-          dteScore: r.dte_score as number
-        }
-      } as HistoricalOptionData;
-    });
+
+    const result = await stmt.bind(symbol.toUpperCase(), cutoffDate.toISOString(), limit).all();
+
+    return result.results as unknown as TopPerformingOption[];
   }
 
   /**
@@ -336,14 +312,18 @@ export class DatabaseService {
     const stmt = this.db.prepare(`
       SELECT 
         DATE(ss.created_at) as date,
-        ss.current_price,
+        MIN(ss.current_price) as low_price,
+        MAX(ss.current_price) as high_price,
+        AVG(ss.current_price) as avg_price,
         MAX(oss.total_score) as top_option_score,
-        COUNT(os.id) as option_count
+        AVG(oss.total_score) as avg_option_score,
+        COUNT(DISTINCT os.id) as unique_options_count,
+        COUNT(ss.id) as snapshot_count
       FROM stock_snapshots ss
       LEFT JOIN option_snapshots os ON ss.id = os.snapshot_id
       LEFT JOIN option_score_snapshots oss ON os.id = oss.option_snapshot_id
       WHERE ss.symbol = ? AND ss.created_at >= ?
-      GROUP BY DATE(ss.created_at), ss.current_price
+      GROUP BY DATE(ss.created_at)
       ORDER BY date DESC
     `);
     
@@ -352,12 +332,16 @@ export class DatabaseService {
     return {
       symbol: symbol.toUpperCase(),
       snapshots: result.results.map((row: unknown) => {
-        const r = row as Record<string, unknown>;
+        const r = row as Record<string, any>;
         return {
-          date: r.date as string,
-          currentPrice: r.current_price as number,
-          topOptionScore: (r.top_option_score as number) || 0,
-          optionCount: r.option_count as number
+          date: r.date,
+          lowPrice: r.low_price,
+          highPrice: r.high_price,
+          avgPrice: r.avg_price,
+          topOptionScore: r.top_option_score || 0,
+          avgOptionScore: r.avg_option_score || 0,
+          uniqueOptionsCount: r.unique_options_count,
+          snapshotCount: r.snapshot_count
         };
       })
     };
