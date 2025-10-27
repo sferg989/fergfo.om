@@ -184,13 +184,13 @@ export class OptionsService {
       const baseData = await YahooFinance.options(symbol, { formatted: true });
       const currentPrice = baseData.quote?.regularMarketPrice ?? 0;
 
-      // Get Friday expiration dates within 90 days
-      const fridayDates = this.getFridayExpirationDates();
+      // Get available expiration dates
+      const expirationDates = await this.getAvailableExpirationDates(symbol);
       
       // Fetch options data for each Friday expiration date
       const allOptions: OptionData[] = [];
       
-      for (const date of fridayDates) {
+      for (const date of expirationDates) {
         try {
           const dateOptionsData = await YahooFinance.options(symbol, {
             date: date,
@@ -248,21 +248,14 @@ export class OptionsService {
     }
   }
 
-  private getFridayExpirationDates(): Date[] {
-    const today = new Date();
-    
-    // Find the next Friday
-    const daysUntilNextFriday = (5 - today.getDay() + 7) % 7;
-    const nextFriday = new Date(today.getTime() + (daysUntilNextFriday * 24 * 60 * 60 * 1000));
-    
-    // Generate the next 5 Fridays
-    const fridayDates: Date[] = [];
-    for (let i = 0; i < 15; i++) {
-      let fridayDate = new Date(nextFriday.getTime() + (i * 7 * 24 * 60 * 60 * 1000));
-      fridayDate = new Date(fridayDate.toISOString().split('T')[0]);
-      fridayDates.push(fridayDate);
+  private async getAvailableExpirationDates(symbol: string): Promise<Date[]> {
+    try {
+      const optionsData = await YahooFinance.options(symbol, {});
+      return optionsData.expirationDates.map(dateStr => new Date(dateStr));
+    } catch (error) {
+      console.error(`Error fetching expiration dates for ${symbol}:`, error);
+      return [];
     }
-    return fridayDates;
   }
 
   private transformYahooOptionsData(puts: YahooOptionData[], currentPrice: number, expirationDate: Date): OptionData[] {
@@ -280,12 +273,12 @@ export class OptionsService {
       })
       .map((option): OptionData => {
         // Estimate theta based on time decay if not provided
-        // This is a rough estimation: theta ≈ -option premium / days to expiry / 365
+        // This is a rough estimation: theta ≈ -option premium / days to expiry
         const daysToExpiry = Math.ceil(
           (expirationDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
         );
-        const estimatedTheta = daysToExpiry > 0 ? 
-          -((option.bid ?? 0) / daysToExpiry / 365) : undefined;
+        const estimatedTheta = daysToExpiry > 0 ?
+          -((option.bid ?? 0) / daysToExpiry) : undefined;
 
         return {
           contractName: option.contractSymbol,

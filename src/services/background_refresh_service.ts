@@ -1,4 +1,5 @@
 import { OptionsService } from './optionsService';
+import { isMarketHours as checkMarketHours } from '../utils/marketHoursUtils';
 
 interface SymbolTrackingRecord {
   id: string;
@@ -238,30 +239,11 @@ export class BackgroundRefreshService {
   }
 
   /**
-   * Check if it's during market hours (9:30 AM - 4:00 PM ET, Monday-Friday)
+   * Check if it's during market hours (9:30 AM - 4:00 PM ET, Monday-Friday, excluding holidays)
+   * Now properly handles DST (EDT/EST) and US market holidays
    */
    isMarketHours(): boolean {
-    const now = new Date();
-    
-    // Convert to ET (UTC-5 or UTC-4 depending on DST)
-    // For simplicity, we'll use UTC-5 (EST) 
-    const etTime = new Date(now.getTime() - (5 * 60 * 60 * 1000));
-    
-    const day = etTime.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-    const hour = etTime.getHours();
-    const minute = etTime.getMinutes();
-    
-    // Check if it's Monday (1) through Friday (5)
-    if (day < 1 || day > 5) {
-      return false;
-    }
-    
-    // Check if it's between 9:30 AM and 4:00 PM ET
-    const currentTimeMinutes = hour * 60 + minute;
-    const marketOpenMinutes = 9 * 60 + 30; // 9:30 AM
-    const marketCloseMinutes = 16 * 60; // 4:00 PM
-    
-    return currentTimeMinutes >= marketOpenMinutes && currentTimeMinutes < marketCloseMinutes;
+    return checkMarketHours();
   }
 
   // Private helper methods
