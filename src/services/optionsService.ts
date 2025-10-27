@@ -272,13 +272,31 @@ export class OptionsService {
                (option.bid ?? 0) > 0; // Only include options with meaningful bid prices
       })
       .map((option): OptionData => {
-        // Estimate theta based on time decay if not provided
-        // This is a rough estimation: theta ≈ -option premium / days to expiry
+        // Estimate theta using improved approximation that accounts for time decay acceleration
         const daysToExpiry = Math.ceil(
           (expirationDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
         );
-        const estimatedTheta = daysToExpiry > 0 ?
-          -((option.bid ?? 0) / daysToExpiry) : undefined;
+
+        // Better theta approximation that accounts for:
+        // 1. Non-linear time decay (accelerates near expiration)
+        // 2. Options being worth less as they approach expiration
+        // 3. ATM options having highest theta
+        let estimatedTheta: number | undefined;
+
+        if (daysToExpiry > 0 && (option.bid ?? 0) > 0) {
+          const timeDecayFactor = Math.sqrt(365 / Math.max(daysToExpiry, 1));
+          const moneyness = Math.abs(option.strike - currentPrice) / currentPrice;
+          const moneynessAdjustment = Math.exp(-moneyness * 10); // ATM has factor ~1, far OTM/ITM ~0
+
+          // Base theta calculation with adjustments
+          const baseThetaDaily = -((option.bid ?? 0) * 0.5) / Math.sqrt(daysToExpiry);
+          estimatedTheta = baseThetaDaily * timeDecayFactor * moneynessAdjustment;
+
+          // Cap theta to reasonable bounds (typically between -0.50 and 0 for most options)
+          estimatedTheta = Math.max(-0.50, Math.min(0, estimatedTheta));
+        } else {
+          estimatedTheta = undefined;
+        }
 
         return {
           contractName: option.contractSymbol,

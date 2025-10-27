@@ -1,4 +1,5 @@
 import { OptionsService } from './optionsService';
+import { DatabaseService } from './database_service';
 import { isMarketHours as checkMarketHours } from '../utils/marketHoursUtils';
 
 interface SymbolTrackingRecord {
@@ -172,31 +173,18 @@ export class BackgroundRefreshService {
   }
 
   /**
-   * Add a new symbol to track (for user-searched symbols)
+   * Add a new symbol to track (delegates to DatabaseService for consistency)
    */
   async addSymbolToTrack(symbol: string, isPreferred: boolean = false): Promise<void> {
-    const now = new Date().toISOString();
-    const id = `${isPreferred ? 'preferred' : 'user'}_${symbol.toLowerCase()}`;
-    
+    const dbService = DatabaseService.getInstance(this.db);
+
     try {
-      await this.db.prepare(`
-        INSERT OR REPLACE INTO symbol_tracking 
-        (id, symbol, is_preferred, priority, is_active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 1, ?, ?)
-      `).bind(
-        id,
-        symbol.toUpperCase(),
-        isPreferred ? 1 : 0,
-        isPreferred ? 10 : 5, // Preferred symbols get higher priority
-        now,
-        now
-      ).run();
-      
-      // Update total symbols count
+      // Use the centralized method from DatabaseService
+      await dbService.addSymbolToTracking(symbol, isPreferred);
+
+      // Update total symbols count in refresh state
       const count = await this.getActiveSymbolCount();
       await this.updateRefreshState({ total_symbols: count });
-      
-      console.log(`Added ${symbol} to tracking (preferred: ${isPreferred})`);
     } catch (error) {
       console.error(`Error adding symbol ${symbol} to tracking:`, error);
       throw error;

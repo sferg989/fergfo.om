@@ -149,24 +149,38 @@ export class DatabaseService {
   }
 
   /**
-   * Get recent snapshots for a symbol
+   * Get recent snapshots for a symbol, deduplicating by date and price
    */
   async getRecentSnapshots(symbol: string, limit: number = 10): Promise<StockSnapshot[]> {
     const stmt = this.db.prepare(`
-      SELECT 
-        ss.id,
-        ss.symbol,
-        ss.current_price,
-        MAX(ss.fetched_at) as fetched_at,
-        ss.source,
-        COUNT(*) as snapshot_count
-      FROM stock_snapshots ss
-      WHERE ss.symbol = ?
-      GROUP BY DATE(ss.created_at), ROUND(ss.current_price, 0)
-      ORDER BY MAX(ss.created_at) DESC
+      WITH grouped_snapshots AS (
+        SELECT
+          id,
+          symbol,
+          current_price,
+          fetched_at,
+          source,
+          created_at,
+          ROW_NUMBER() OVER (
+            PARTITION BY DATE(created_at), ROUND(current_price, 1)
+            ORDER BY created_at DESC
+          ) as row_num
+        FROM stock_snapshots
+        WHERE symbol = ?
+      )
+      SELECT
+        id,
+        symbol,
+        current_price,
+        fetched_at,
+        source,
+        created_at
+      FROM grouped_snapshots
+      WHERE row_num = 1
+      ORDER BY created_at DESC
       LIMIT ?
     `);
-    
+
     const result = await stmt.bind(symbol.toUpperCase(), limit).all();
     return (result.results as unknown[]).map((row) => {
       const r = row as Record<string, unknown>;
@@ -279,23 +293,35 @@ export class DatabaseService {
    */
   async addSymbolToTracking(symbol: string, isPreferred: boolean = false): Promise<void> {
     const now = new Date().toISOString();
-    const id = `${isPreferred ? 'preferred' : 'user'}_${symbol.toLowerCase()}`;
-    
+
     try {
+      // First check if the symbol already exists and what its current priority is
+      const existing = await this.db.prepare(`
+        SELECT is_preferred, priority FROM symbol_tracking WHERE symbol = ?
+      `).bind(symbol.toUpperCase()).first();
+
+      // If it exists and is preferred, keep it preferred (don't downgrade)
+      const finalIsPreferred = existing?.is_preferred ? true : isPreferred;
+      const finalPriority = existing?.is_preferred ? 10 : (isPreferred ? 10 : 5);
+      const finalId = `${finalIsPreferred ? 'preferred' : 'user'}_${symbol.toLowerCase()}`;
+
       await this.db.prepare(`
-        INSERT OR IGNORE INTO symbol_tracking 
+        INSERT OR REPLACE INTO symbol_tracking
         (id, symbol, is_preferred, priority, is_active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 1, ?, ?)
+        VALUES (?, ?, ?, ?, 1,
+          COALESCE((SELECT created_at FROM symbol_tracking WHERE symbol = ?), ?),
+          ?)
       `).bind(
-        id, 
-        symbol.toUpperCase(), 
-        isPreferred ? 1 : 0, 
-        isPreferred ? 10 : 5, // Preferred symbols get higher priority
-        now, 
-        now
+        finalId,
+        symbol.toUpperCase(),
+        finalIsPreferred ? 1 : 0,
+        finalPriority,
+        symbol.toUpperCase(), // For the COALESCE subquery
+        now, // Default created_at if new
+        now  // updated_at
       ).run();
-      
-      console.log(`Added ${symbol} to tracking (preferred: ${isPreferred})`);
+
+      console.log(`Added/Updated ${symbol} to tracking (preferred: ${finalIsPreferred})`);
     } catch (error) {
       console.error(`Error adding symbol ${symbol} to tracking:`, error);
       throw error;

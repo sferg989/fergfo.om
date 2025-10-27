@@ -53,8 +53,57 @@ export function isMarketHoliday(date: Date): boolean {
 }
 
 /**
+ * Get Eastern Time components from a UTC date
+ * Returns the date/time as it would appear in Eastern Time
+ */
+export function getEasternTimeComponents(date: Date): {
+  day: number;
+  hour: number;
+  minute: number;
+  dateString: string
+} {
+  const isDST = isDaylightSavingTime(date);
+  const offsetHours = isDST ? 4 : 5; // EDT is UTC-4, EST is UTC-5
+
+  // Get UTC components
+  const utcHours = date.getUTCHours();
+  const utcMinutes = date.getUTCMinutes();
+  const utcDay = date.getUTCDay();
+  const utcDate = date.getUTCDate();
+
+  // Calculate ET hours (can be negative or > 24, we'll adjust)
+  let etHours = utcHours - offsetHours;
+  let etDay = utcDay;
+  let etDate = utcDate;
+
+  // Adjust for day boundary crossing
+  if (etHours < 0) {
+    etHours += 24;
+    etDay = (etDay - 1 + 7) % 7; // Wrap around for day of week
+    etDate -= 1; // Previous calendar date
+  } else if (etHours >= 24) {
+    etHours -= 24;
+    etDay = (etDay + 1) % 7; // Wrap around for day of week
+    etDate += 1; // Next calendar date
+  }
+
+  // Create date string for holiday checking
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth();
+  const adjustedDate = new Date(Date.UTC(year, month, etDate));
+  const dateString = adjustedDate.toISOString().split('T')[0];
+
+  return {
+    day: etDay,
+    hour: etHours,
+    minute: utcMinutes,
+    dateString
+  };
+}
+
+/**
  * Convert current time to Eastern Time (ET)
- * Handles both EST (UTC-5) and EDT (UTC-4) automatically
+ * @deprecated Use getEasternTimeComponents instead for accurate time zone handling
  */
 export function toEasternTime(date: Date): Date {
   const isDST = isDaylightSavingTime(date);
@@ -66,25 +115,21 @@ export function toEasternTime(date: Date): Date {
  * Check if it's during market hours (9:30 AM - 4:00 PM ET, Monday-Friday, excluding holidays)
  */
 export function isMarketHours(date: Date = new Date()): boolean {
-  // Check if it's a market holiday
-  if (isMarketHoliday(date)) {
+  // Get Eastern Time components
+  const et = getEasternTimeComponents(date);
+
+  // Check if it's a market holiday (using ET date)
+  if (ALL_MARKET_HOLIDAYS.includes(et.dateString)) {
     return false;
   }
 
-  // Convert to Eastern Time
-  const etTime = toEasternTime(date);
-
-  const day = etTime.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-  const hour = etTime.getHours();
-  const minute = etTime.getMinutes();
-
   // Check if it's Monday (1) through Friday (5)
-  if (day < 1 || day > 5) {
+  if (et.day < 1 || et.day > 5) {
     return false;
   }
 
   // Check if it's between 9:30 AM and 4:00 PM ET
-  const currentTimeMinutes = hour * 60 + minute;
+  const currentTimeMinutes = et.hour * 60 + et.minute;
   const marketOpenMinutes = 9 * 60 + 30; // 9:30 AM
   const marketCloseMinutes = 16 * 60; // 4:00 PM
 
