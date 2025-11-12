@@ -117,25 +117,35 @@ export class BackgroundRefreshService {
   /**
    * Refresh options data for a specific symbol
    */
-  async refreshSymbol(symbol: string): Promise<{ success: boolean; error?: string }> {
+  async refreshSymbol(symbol: string): Promise<{ success: boolean; error?: string; details?: { optionsCount?: number; duration?: number } }> {
     const now = new Date().toISOString();
-    
+    const startTime = Date.now();
+
     try {
-      console.log(`Starting refresh for symbol: ${symbol}`);
-      
+      console.log(`[REFRESH] Starting refresh for ${symbol} at ${now}`);
+
       // Fetch fresh data from external API
       const result = await this.optionsService.fetchFreshOptionsData(symbol);
-      
+      const duration = Date.now() - startTime;
+
       if (result.error) {
+        const errorCount = await this.incrementErrorCount(symbol);
+
         // Update symbol tracking with error
         await this.updateSymbolTracking(symbol, {
           last_error: result.error,
-          error_count: await this.incrementErrorCount(symbol),
+          error_count: errorCount,
           updated_at: now
         });
-        
-        console.error(`Failed to refresh ${symbol}: ${result.error}`);
-        return { success: false, error: result.error };
+
+        console.error(`[REFRESH ERROR] ${symbol} failed after ${duration}ms: ${result.error}`);
+        console.error(`[REFRESH ERROR] Error count for ${symbol}: ${errorCount}`);
+
+        return {
+          success: false,
+          error: result.error,
+          details: { duration }
+        };
       }
 
       // Successful refresh - update tracking
@@ -154,21 +164,44 @@ export class BackgroundRefreshService {
         updated_at: now
       });
 
-      console.log(`Successfully refreshed ${symbol} with  options`);
-      return { success: true };
-      
+      const optionsCount = result.options.length;
+      console.log(`[REFRESH SUCCESS] ${symbol} refreshed with ${optionsCount} options in ${duration}ms`);
+      console.log(`[REFRESH SUCCESS] Current price: $${result.currentPrice}`);
+      console.log(`[REFRESH STATE] Position ${refreshState.current_position + 1}/${refreshState.total_symbols}`);
+
+      return {
+        success: true,
+        details: {
+          optionsCount,
+          duration
+        }
+      };
+
     } catch (error) {
+      const duration = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      const errorCount = await this.incrementErrorCount(symbol);
+
       // Update symbol tracking with error
       await this.updateSymbolTracking(symbol, {
         last_error: errorMessage,
-        error_count: await this.incrementErrorCount(symbol),
+        error_count: errorCount,
         updated_at: now
       });
-      
-      console.error(`Error refreshing ${symbol}:`, error);
-      return { success: false, error: errorMessage };
+
+      console.error(`[REFRESH EXCEPTION] ${symbol} threw exception after ${duration}ms:`);
+      console.error(`[REFRESH EXCEPTION] Error: ${errorMessage}`);
+      if (errorStack) {
+        console.error(`[REFRESH EXCEPTION] Stack: ${errorStack}`);
+      }
+      console.error(`[REFRESH EXCEPTION] Error count for ${symbol}: ${errorCount}`);
+
+      return {
+        success: false,
+        error: errorMessage,
+        details: { duration }
+      };
     }
   }
 

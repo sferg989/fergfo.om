@@ -149,7 +149,8 @@ export class DatabaseService {
   }
 
   /**
-   * Get recent snapshots for a symbol, deduplicating by date and price
+   * Get recent snapshots for a symbol, deduplicating by meaningful price changes
+   * Only deduplicates if price change is < 0.1% within the same hour
    */
   async getRecentSnapshots(symbol: string, limit: number = 10): Promise<StockSnapshot[]> {
     const stmt = this.db.prepare(`
@@ -162,7 +163,10 @@ export class DatabaseService {
           source,
           created_at,
           ROW_NUMBER() OVER (
-            PARTITION BY DATE(created_at), ROUND(current_price, 1)
+            PARTITION BY
+              DATE(created_at),
+              strftime('%H', created_at),
+              CAST(current_price * 1000 AS INTEGER)
             ORDER BY created_at DESC
           ) as row_num
         FROM stock_snapshots
@@ -264,16 +268,16 @@ export class DatabaseService {
     cutoffDate.setDate(cutoffDate.getDate() - days);
 
     const stmt = this.db.prepare(`
-      SELECT 
+      SELECT
         os.strike,
-        os.expiration_date,
-        MAX(oss.total_score) as total_score,
-        AVG(os.last_price) as avg_price,
-        MAX(os.volume) as max_volume,
-        MAX(os.open_interest) as max_open_interest,
-        MIN(os.bid) as best_bid,
-        MAX(os.ask) as best_ask,
-        COUNT(*) as snapshot_count
+        os.expiration_date as expirationDate,
+        MAX(oss.total_score) as totalScore,
+        AVG(os.last_price) as avgPrice,
+        MAX(os.volume) as maxVolume,
+        MAX(os.open_interest) as maxOpenInterest,
+        MIN(os.bid) as bestBid,
+        MAX(os.ask) as bestAsk,
+        COUNT(*) as snapshotCount
       FROM option_snapshots os
       JOIN stock_snapshots ss ON os.snapshot_id = ss.id
       JOIN option_score_snapshots oss ON os.id = oss.option_snapshot_id

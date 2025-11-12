@@ -65,11 +65,58 @@ export class OptionsService {
       // Get basic options data to retrieve current price from quote
       const data = await YahooFinance.options(symbol, { formatted: true });
       const currentPrice = data.quote?.regularMarketPrice ?? 0;
-      
+
       return currentPrice;
     } catch (error) {
       console.error('Error fetching current price:', error);
       return 0;
+    }
+  }
+
+  /**
+   * Refresh just the current stock price without fetching full options chain
+   * This is faster and can be done more frequently
+   */
+  async refreshCurrentPrice(symbol: string): Promise<{ currentPrice: number; fetchedAt: string; error?: string }> {
+    try {
+      console.log(`Refreshing current price for ${symbol}`);
+
+      const currentPrice = await this.getCurrentPrice(symbol);
+
+      if (currentPrice === 0) {
+        return {
+          currentPrice: 0,
+          fetchedAt: new Date().toISOString(),
+          error: 'Unable to fetch current price'
+        };
+      }
+
+      // Save just the price snapshot to database if available
+      if (this.dbService) {
+        try {
+          await this.dbService.createStockSnapshot({
+            symbol,
+            currentPrice,
+            source: 'yahoo-finance'
+          });
+          console.log(`Saved price snapshot for ${symbol}: $${currentPrice}`);
+        } catch (dbError) {
+          console.error('Failed to save price snapshot:', dbError);
+          // Continue even if save fails
+        }
+      }
+
+      return {
+        currentPrice,
+        fetchedAt: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('Error refreshing current price:', error);
+      return {
+        currentPrice: 0,
+        fetchedAt: new Date().toISOString(),
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
     }
   }
 

@@ -31,14 +31,22 @@ const sortedGroups = groupOptionsByExpiry(options);
       <div class="current-price">
         <div class="flex items-center gap-2">
           <span class="symbol">{symbol}</span>
-          <span class="price">Current Price: ${currentPrice.toFixed(4)}</span>
+          <span class="price" id="current-price">Current Price: ${currentPrice.toFixed(4)}</span>
+          <button
+            id="refresh-price-btn"
+            data-symbol={symbol}
+            class="refresh-price-button"
+            title="Refresh current price"
+          >
+            🔄 Refresh Price
+          </button>
         </div>
         <div class="flex items-center gap-2">
-          <span class="price-range">
+          <span class="price-range" id="price-range">
             Range: ${(currentPrice * 0.9).toFixed(2)} - ${(currentPrice * 1.1).toFixed(2)}
           </span>
           {fetchedAt && (
-            <span class="last-updated">
+            <span class="last-updated" id="last-updated">
               Last updated: {new Date(fetchedAt).toLocaleString()}
             </span>
           )}
@@ -93,18 +101,37 @@ const sortedGroups = groupOptionsByExpiry(options);
     font-style: italic;
   }
 
-  .refresh-button {
+  .refresh-price-button {
     font-size: 0.75rem;
-    padding: 0.25rem 0.5rem;
-    background-color: #e5e7eb;
-    color: #4b5563;
-    border-radius: 0.25rem;
+    padding: 0.375rem 0.75rem;
+    background-color: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 0.375rem;
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: all 0.2s;
+    font-weight: 500;
   }
 
-  .refresh-button:hover {
-    background-color: #d1d5db;
+  .refresh-price-button:hover {
+    background-color: #2563eb;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .refresh-price-button:active {
+    transform: translateY(0);
+  }
+
+  .refresh-price-button:disabled {
+    background-color: #9ca3af;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .refresh-price-button.loading {
+    background-color: #6b7280;
+    cursor: wait;
   }
 
   .expiry-groups {
@@ -131,4 +158,66 @@ const sortedGroups = groupOptionsByExpiry(options);
       details.classList.toggle('hidden');
     });
   });
+
+  // Handle price refresh
+  const refreshPriceBtn = document.getElementById('refresh-price-btn');
+  if (refreshPriceBtn) {
+    refreshPriceBtn.addEventListener('click', async () => {
+      const symbol = refreshPriceBtn.getAttribute('data-symbol');
+      if (!symbol) return;
+
+      // Disable button and show loading state
+      refreshPriceBtn.setAttribute('disabled', 'true');
+      refreshPriceBtn.classList.add('loading');
+      const originalText = refreshPriceBtn.textContent;
+      refreshPriceBtn.textContent = '⏳ Refreshing...';
+
+      try {
+        const response = await fetch(`/api/refresh-price?symbol=${symbol}`);
+        const data = await response.json() as { error?: string; currentPrice?: number; fetchedAt?: string };
+
+        if (data.error) {
+          alert(`Error refreshing price: ${data.error}`);
+          return;
+        }
+
+        // Update the price display
+        const priceElement = document.getElementById('current-price');
+        const priceRangeElement = document.getElementById('price-range');
+        const lastUpdatedElement = document.getElementById('last-updated');
+
+        if (priceElement && data.currentPrice) {
+          const newPrice = data.currentPrice;
+          priceElement.textContent = `Current Price: $${newPrice.toFixed(4)}`;
+
+          // Update price range
+          if (priceRangeElement) {
+            priceRangeElement.textContent = `Range: $${(newPrice * 0.9).toFixed(2)} - $${(newPrice * 1.1).toFixed(2)}`;
+          }
+
+          // Update last updated time
+          if (lastUpdatedElement && data.fetchedAt) {
+            const fetchedDate = new Date(data.fetchedAt);
+            lastUpdatedElement.textContent = `Last updated: ${fetchedDate.toLocaleString()}`;
+          }
+
+          // Add a brief highlight animation
+          priceElement.style.transition = 'background-color 0.5s';
+          priceElement.style.backgroundColor = '#bfdbfe';
+          setTimeout(() => {
+            priceElement.style.backgroundColor = 'transparent';
+          }, 1000);
+        }
+
+      } catch (error) {
+        console.error('Error refreshing price:', error);
+        alert('Failed to refresh price. Please try again.');
+      } finally {
+        // Re-enable button
+        refreshPriceBtn.removeAttribute('disabled');
+        refreshPriceBtn.classList.remove('loading');
+        refreshPriceBtn.textContent = originalText;
+      }
+    });
+  }
 </script>
