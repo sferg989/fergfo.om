@@ -80,9 +80,11 @@ export class OptionScorer {
    * Max score for IV >= 60% with diminishing returns
    */
   private static calculateIvScore(iv: number): number {
+    // Yahoo reports IV as a fraction (0.45 = 45%); convert to percent before scoring
+    const ivPct = iv * 100;
     // Cap IV at 100% to prevent unrealistic scores
-    const cappedIv = Math.min(iv, 100);
-    // Use square root for diminishing returns, max at 60% IV
+    const cappedIv = Math.min(ivPct, 100);
+    // Linear scale, max score at 60% IV
     return Math.min(SCORE_WEIGHT.IV, (cappedIv / 60) * SCORE_WEIGHT.IV);
   }
 
