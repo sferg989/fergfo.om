@@ -10,7 +10,7 @@ interface SymbolTrackingRecord {
   last_refreshed_at?: string;
   last_error?: string;
   error_count: number;
-  is_active: boolean;
+  is_active: number; // SQLite boolean (0/1); D1 bind does not accept JS booleans
   created_at: string;
   updated_at: string;
 }
@@ -34,6 +34,9 @@ interface NextSymbolResult {
   error_count: number;
   position: number;
 }
+
+/** Consecutive failures before a symbol is removed from the rotation */
+const MAX_CONSECUTIVE_ERRORS = 5;
 
 export class BackgroundRefreshService {
   private static instance: BackgroundRefreshService;
@@ -129,14 +132,7 @@ export class BackgroundRefreshService {
       const duration = Date.now() - startTime;
 
       if (result.error) {
-        const errorCount = await this.incrementErrorCount(symbol);
-
-        // Update symbol tracking with error
-        await this.updateSymbolTracking(symbol, {
-          last_error: result.error,
-          error_count: errorCount,
-          updated_at: now
-        });
+        const errorCount = await this.recordRefreshError(symbol, result.error, now);
 
         console.error(`[REFRESH ERROR] ${symbol} failed after ${duration}ms: ${result.error}`);
         console.error(`[REFRESH ERROR] Error count for ${symbol}: ${errorCount}`);
@@ -156,18 +152,11 @@ export class BackgroundRefreshService {
         updated_at: now
       });
 
-      // Update refresh state position
-      const refreshState = await this.getRefreshState();
-      await this.updateRefreshState({
-        last_symbol_refreshed: symbol,
-        current_position: (refreshState.current_position % refreshState.total_symbols) + 1,
-        updated_at: now
-      });
+      await this.advanceRefreshPosition(symbol, now);
 
       const optionsCount = result.options.length;
       console.log(`[REFRESH SUCCESS] ${symbol} refreshed with ${optionsCount} options in ${duration}ms`);
       console.log(`[REFRESH SUCCESS] Current price: $${result.currentPrice}`);
-      console.log(`[REFRESH STATE] Position ${refreshState.current_position + 1}/${refreshState.total_symbols}`);
 
       return {
         success: true,
@@ -181,14 +170,7 @@ export class BackgroundRefreshService {
       const duration = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const errorStack = error instanceof Error ? error.stack : undefined;
-      const errorCount = await this.incrementErrorCount(symbol);
-
-      // Update symbol tracking with error
-      await this.updateSymbolTracking(symbol, {
-        last_error: errorMessage,
-        error_count: errorCount,
-        updated_at: now
-      });
+      const errorCount = await this.recordRefreshError(symbol, errorMessage, now);
 
       console.error(`[REFRESH EXCEPTION] ${symbol} threw exception after ${duration}ms:`);
       console.error(`[REFRESH EXCEPTION] Error: ${errorMessage}`);
@@ -307,12 +289,49 @@ export class BackgroundRefreshService {
     `).bind(...values, symbol.toUpperCase()).run();
   }
 
-  private async incrementErrorCount(symbol: string): Promise<number> {
+  /**
+   * Move the round-robin pointer past the given symbol.
+   * Called on both success and failure so one bad symbol cannot stall the rotation.
+   */
+  private async advanceRefreshPosition(symbol: string, now: string): Promise<void> {
+    const refreshState = await this.getRefreshState();
+    const total = Math.max(1, refreshState.total_symbols);
+    const nextPosition = (refreshState.current_position % total) + 1;
+
+    await this.updateRefreshState({
+      last_symbol_refreshed: symbol,
+      current_position: nextPosition,
+      updated_at: now
+    });
+
+    console.log(`[REFRESH STATE] Position ${nextPosition}/${total}`);
+  }
+
+  /**
+   * Record a failed refresh: bump the consecutive error count, deactivate the symbol
+   * once it exceeds MAX_CONSECUTIVE_ERRORS, and advance the rotation.
+   * Returns the new error count.
+   */
+  private async recordRefreshError(symbol: string, errorMessage: string, now: string): Promise<number> {
     const result = await this.db.prepare(`
       SELECT error_count FROM symbol_tracking WHERE symbol = ?
     `).bind(symbol.toUpperCase()).first();
-    
-    return result ? (result.error_count as number) + 1 : 1;
+    const errorCount = result ? (result.error_count as number) + 1 : 1;
+    const deactivate = errorCount >= MAX_CONSECUTIVE_ERRORS;
+
+    await this.updateSymbolTracking(symbol, {
+      last_error: errorMessage,
+      error_count: errorCount,
+      is_active: deactivate ? 0 : undefined,
+      updated_at: now
+    });
+
+    if (deactivate) {
+      console.error(`[REFRESH ERROR] ${symbol} deactivated after ${errorCount} consecutive failures`);
+    }
+
+    await this.advanceRefreshPosition(symbol, now);
+    return errorCount;
   }
 
   private async getActiveSymbolCount(): Promise<number> {
