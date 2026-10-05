@@ -186,14 +186,17 @@ export class OptionsService {
       throw new Error('Database service not available');
     }
 
-    // Get the most recent snapshot for this symbol
-    const snapshots = await this.dbService.getRecentSnapshots(symbol, 1);
-    if (snapshots.length === 0) {
+    // Options come from the newest snapshot that actually has an options chain.
+    // The refresh-price endpoint writes price-only snapshots, which must not hide the chain.
+    const latestSnapshot = await this.dbService.getLatestSnapshotWithOptions(symbol);
+    if (!latestSnapshot) {
       return { options: [], currentPrice: 0, fetchedAt: '' };
     }
 
-    const latestSnapshot = snapshots[0];
-    
+    // The price itself should be the freshest one we have, even if it came from a price-only refresh
+    const [newestSnapshot] = await this.dbService.getRecentSnapshots(symbol, 1);
+    const currentPrice = newestSnapshot?.currentPrice ?? latestSnapshot.currentPrice;
+
     // Get options for this snapshot
     const optionsData = await this.dbService.getOptionsForSnapshot(latestSnapshot.id);
     
@@ -215,7 +218,7 @@ export class OptionsService {
 
     return {
       options,
-      currentPrice: latestSnapshot.currentPrice,
+      currentPrice,
       fetchedAt: latestSnapshot.fetchedAt
     };
   }

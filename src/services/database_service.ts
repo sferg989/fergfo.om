@@ -200,6 +200,32 @@ export class DatabaseService {
   }
 
   /**
+   * Get the most recent snapshot for a symbol that has option rows attached.
+   * Price-only snapshots (from the refresh-price endpoint) are skipped.
+   */
+  async getLatestSnapshotWithOptions(symbol: string): Promise<StockSnapshot | null> {
+    const row = await this.db.prepare(`
+      SELECT id, symbol, current_price, fetched_at, source, created_at
+      FROM stock_snapshots ss
+      WHERE symbol = ?
+        AND EXISTS (SELECT 1 FROM option_snapshots os WHERE os.snapshot_id = ss.id)
+      ORDER BY created_at DESC
+      LIMIT 1
+    `).bind(symbol.toUpperCase()).first();
+
+    if (!row) return null;
+    const r = row as Record<string, unknown>;
+    return {
+      id: r.id as string,
+      symbol: r.symbol as string,
+      currentPrice: r.current_price as number,
+      fetchedAt: r.fetched_at as string,
+      source: (r.source as string) ?? 'finnhub',
+      createdAt: r.created_at as string | undefined
+    };
+  }
+
+  /**
    * Get options for a specific snapshot
    */
   async getOptionsForSnapshot(snapshotId: string): Promise<HistoricalOptionData[]> {
