@@ -39,14 +39,6 @@ export default {
 
       console.log('[WORKER] Market is open, proceeding with refresh');
 
-      // Free space before writing; the database hit its size limit once already.
-      // Housekeeping must never block the refresh itself.
-      try {
-        await refreshService.pruneOldSnapshots();
-      } catch (pruneError) {
-        console.error('[PRUNE ERROR]', pruneError instanceof Error ? pruneError.message : pruneError);
-      }
-
       // Get next symbol to refresh
       const symbolToRefresh = await refreshService.getNextSymbolToRefresh();
 
@@ -73,6 +65,14 @@ export default {
         if (result.details) {
           console.error(`[WORKER FAILURE] Duration: ${result.details.duration}ms`);
         }
+      }
+
+      // Housekeeping runs after the refresh: a 40k-row cascade delete in the same
+      // invocation left the following inserts failing with SQLITE_NOMEM.
+      try {
+        await refreshService.pruneOldSnapshots();
+      } catch (pruneError) {
+        console.error('[PRUNE ERROR]', pruneError instanceof Error ? pruneError.message : pruneError);
       }
 
       // Log current statistics
