@@ -344,35 +344,30 @@ export class DatabaseService {
    */
   async addSymbolToTracking(symbol: string, isPreferred: boolean = false): Promise<void> {
     const now = new Date().toISOString();
+    const upper = symbol.toUpperCase();
 
     try {
-      // First check if the symbol already exists and what its current priority is
-      const existing = await this.db.prepare(`
-        SELECT is_preferred, priority FROM symbol_tracking WHERE symbol = ?
-      `).bind(symbol.toUpperCase()).first();
-
-      // If it exists and is preferred, keep it preferred (don't downgrade)
-      const finalIsPreferred = existing?.is_preferred ? true : isPreferred;
-      const finalPriority = existing?.is_preferred ? 10 : (isPreferred ? 10 : 5);
-      const finalId = `${finalIsPreferred ? 'preferred' : 'user'}_${symbol.toLowerCase()}`;
-
+      // Upsert: a symbol already tracked keeps its refresh state (last_refreshed_at,
+      // error_count, is_active). INSERT OR REPLACE used to wipe all of it on every
+      // page view. Preference and priority can only ever be upgraded.
       await this.db.prepare(`
-        INSERT OR REPLACE INTO symbol_tracking
-        (id, symbol, is_preferred, priority, is_active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 1,
-          COALESCE((SELECT created_at FROM symbol_tracking WHERE symbol = ?), ?),
-          ?)
+        INSERT INTO symbol_tracking
+          (id, symbol, is_preferred, priority, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 1, ?, ?)
+        ON CONFLICT(symbol) DO UPDATE SET
+          is_preferred = MAX(is_preferred, excluded.is_preferred),
+          priority = MAX(priority, excluded.priority),
+          updated_at = excluded.updated_at
       `).bind(
-        finalId,
-        symbol.toUpperCase(),
-        finalIsPreferred ? 1 : 0,
-        finalPriority,
-        symbol.toUpperCase(), // For the COALESCE subquery
-        now, // Default created_at if new
-        now  // updated_at
+        `${isPreferred ? 'preferred' : 'user'}_${symbol.toLowerCase()}`,
+        upper,
+        isPreferred ? 1 : 0,
+        isPreferred ? 10 : 5,
+        now,
+        now
       ).run();
 
-      console.log(`Added/Updated ${symbol} to tracking (preferred: ${finalIsPreferred})`);
+      console.log(`Added/Updated ${upper} in tracking (preferred: ${isPreferred})`);
     } catch (error) {
       console.error(`Error adding symbol ${symbol} to tracking:`, error);
       throw error;
