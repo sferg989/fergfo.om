@@ -7,6 +7,9 @@ import type {
 } from '../types/database';
 import type { OptionData, OptionScore } from '../types/option';
 
+/** Statements per D1 batch call */
+const BATCH_SIZE = 100;
+
 export class DatabaseService {
   private static instance: DatabaseService;
   private db: D1Database;
@@ -53,41 +56,35 @@ export class DatabaseService {
     snapshotId: string,
     options: OptionData[]
   ): Promise<string[]> {
-    const optionIds: string[] = [];
-    
-    for (const option of options) {
-      const id = crypto.randomUUID();
-      const now = new Date().toISOString();
-      
-      const stmt = this.db.prepare(`
-        INSERT INTO option_snapshots (
-          id, snapshot_id, contract_name, strike, last_price, bid, ask,
-          volume, open_interest, expiration_date, implied_volatility,
-          delta, gamma, theta, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      
-      await stmt.bind(
-        id,
-        snapshotId,
-        option.contractName,
-        option.strike,
-        option.lastPrice,
-        option.bid,
-        option.ask,
-        option.volume,
-        option.openInterest,
-        option.expirationDate,
-        option.impliedVolatility,
-        option.delta || null,
-        option.gamma || null,
-        option.theta || null,
-        now
-      ).run();
-      
-      optionIds.push(id);
-    }
-    
+    const now = new Date().toISOString();
+    const insert = this.db.prepare(`
+      INSERT INTO option_snapshots (
+        id, snapshot_id, contract_name, strike, last_price, bid, ask,
+        volume, open_interest, expiration_date, implied_volatility,
+        delta, gamma, theta, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const optionIds = options.map(() => crypto.randomUUID());
+    const statements = options.map((option, i) => insert.bind(
+      optionIds[i],
+      snapshotId,
+      option.contractName,
+      option.strike,
+      option.lastPrice,
+      option.bid,
+      option.ask,
+      option.volume,
+      option.openInterest,
+      option.expirationDate,
+      option.impliedVolatility,
+      option.delta || null,
+      option.gamma || null,
+      option.theta || null,
+      now
+    ));
+
+    await this.runInBatches(statements);
     return optionIds;
   }
 
@@ -102,29 +99,35 @@ export class DatabaseService {
       throw new Error('Mismatch between option snapshot IDs and scores');
     }
 
-    for (let i = 0; i < optionSnapshotIds.length; i++) {
-      const id = crypto.randomUUID();
-      const optionId = optionSnapshotIds[i];
-      const score = scores[i];
-      const now = new Date().toISOString();
-      
-      const stmt = this.db.prepare(`
-        INSERT INTO option_score_snapshots (
-          id, option_snapshot_id, total_score, premium_score,
-          theta_score, strike_score, dte_score, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      
-      await stmt.bind(
-        id,
-        optionId,
-        score.total,
-        score.premiumScore,
-        score.thetaScore,
-        score.strikeScore,
-        score.dteScore,
-        now
-      ).run();
+    const now = new Date().toISOString();
+    const insert = this.db.prepare(`
+      INSERT INTO option_score_snapshots (
+        id, option_snapshot_id, total_score, premium_score,
+        theta_score, strike_score, dte_score, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const statements = scores.map((score, i) => insert.bind(
+      crypto.randomUUID(),
+      optionSnapshotIds[i],
+      score.total,
+      score.premiumScore,
+      score.thetaScore,
+      score.strikeScore,
+      score.dteScore,
+      now
+    ));
+
+    await this.runInBatches(statements);
+  }
+
+  /**
+   * Execute prepared statements in D1 batches: one round trip per chunk instead
+   * of one per row. A 400-option refresh went from ~250s to a few seconds.
+   */
+  private async runInBatches(statements: D1PreparedStatement[]): Promise<void> {
+    for (let i = 0; i < statements.length; i += BATCH_SIZE) {
+      await this.db.batch(statements.slice(i, i + BATCH_SIZE));
     }
   }
 
