@@ -41,7 +41,7 @@ const MAX_CONSECUTIVE_ERRORS = 5;
 /** History endpoints look back 30 days; anything older is dead weight against the D1 size limit */
 const SNAPSHOT_RETENTION_DAYS = 30;
 /** Stock snapshots deleted per prune call (~130 option + score rows cascade per snapshot) */
-const PRUNE_BATCH_SIZE = 100;
+const PRUNE_BATCH_SIZE = 500;
 
 export class BackgroundRefreshService {
   private static instance: BackgroundRefreshService;
@@ -68,7 +68,7 @@ export class BackgroundRefreshService {
     const cutoff = new Date(Date.now() - SNAPSHOT_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
     const deleted = await DatabaseService.getInstance(this.db).deleteSnapshotsBefore(cutoff, PRUNE_BATCH_SIZE);
     if (deleted > 0) {
-      console.log(`[PRUNE] Deleted ${deleted} stock snapshots older than ${cutoff}`);
+      console.log(`[PRUNE] Deleted ${deleted} rows (snapshots plus cascaded options/scores) older than ${cutoff}`);
     }
     return deleted;
   }

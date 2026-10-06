@@ -150,7 +150,8 @@ export class DatabaseService {
 
   /**
    * Delete the oldest stock snapshots created before `cutoffIso`, at most `limit` per call.
-   * Option and score rows go with them via ON DELETE CASCADE. Returns rows deleted.
+   * Option and score rows go with them via ON DELETE CASCADE. Returns total rows deleted,
+   * cascaded rows included.
    */
   async deleteSnapshotsBefore(cutoffIso: string, limit: number): Promise<number> {
     const result = await this.db.prepare(`
