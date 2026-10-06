@@ -40,8 +40,9 @@ const MAX_CONSECUTIVE_ERRORS = 5;
 
 /** History endpoints look back 30 days; anything older is dead weight against the D1 size limit */
 const SNAPSHOT_RETENTION_DAYS = 30;
-/** Stock snapshots deleted per prune call (~130 option + score rows cascade per snapshot) */
-const PRUNE_BATCH_SIZE = 500;
+/** Stock snapshots deleted per prune call (~130 option + score rows cascade per snapshot).
+ * 500 hit D1's SQLITE_NOMEM; 100 ran in well under a second. */
+const PRUNE_BATCH_SIZE = 150;
 
 export class BackgroundRefreshService {
   private static instance: BackgroundRefreshService;
