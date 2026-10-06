@@ -149,6 +149,23 @@ export class DatabaseService {
   }
 
   /**
+   * Delete the oldest stock snapshots created before `cutoffIso`, at most `limit` per call.
+   * Option and score rows go with them via ON DELETE CASCADE. Returns rows deleted.
+   */
+  async deleteSnapshotsBefore(cutoffIso: string, limit: number): Promise<number> {
+    const result = await this.db.prepare(`
+      DELETE FROM stock_snapshots
+      WHERE id IN (
+        SELECT id FROM stock_snapshots
+        WHERE created_at < ?
+        ORDER BY created_at
+        LIMIT ?
+      )
+    `).bind(cutoffIso, limit).run();
+    return result.meta.changes ?? 0;
+  }
+
+  /**
    * Get recent snapshots for a symbol, deduplicating by meaningful price changes
    * Only deduplicates if price change is < 0.1% within the same hour
    */

@@ -38,6 +38,11 @@ interface NextSymbolResult {
 /** Consecutive failures before a symbol is removed from the rotation */
 const MAX_CONSECUTIVE_ERRORS = 5;
 
+/** History endpoints look back 30 days; anything older is dead weight against the D1 size limit */
+const SNAPSHOT_RETENTION_DAYS = 30;
+/** Stock snapshots deleted per prune call (~130 option + score rows cascade per snapshot) */
+const PRUNE_BATCH_SIZE = 100;
+
 export class BackgroundRefreshService {
   private static instance: BackgroundRefreshService;
   private db: D1Database;
@@ -53,6 +58,19 @@ export class BackgroundRefreshService {
       this.instance = new BackgroundRefreshService(db);
     }
     return this.instance;
+  }
+
+  /**
+   * Delete one batch of snapshots past the retention window. Called every tick so the
+   * database never fills up again; a batch is cheap when there is nothing to delete.
+   */
+  async pruneOldSnapshots(): Promise<number> {
+    const cutoff = new Date(Date.now() - SNAPSHOT_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    const deleted = await DatabaseService.getInstance(this.db).deleteSnapshotsBefore(cutoff, PRUNE_BATCH_SIZE);
+    if (deleted > 0) {
+      console.log(`[PRUNE] Deleted ${deleted} stock snapshots older than ${cutoff}`);
+    }
+    return deleted;
   }
 
   /**
