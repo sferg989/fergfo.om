@@ -2,6 +2,9 @@ import { DatabaseService } from './database_service';
 import { OptionScorer } from '../utils/optionScorer';
 import YahooFinance from 'yahoo-finance2';
 
+// yahoo-finance2 v3+ is instance-based; one shared client keeps the cookie/crumb session.
+const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
+
 export interface OptionData {
   contractName: string;
   strike: number;
@@ -63,7 +66,7 @@ export class OptionsService {
   async getCurrentPrice(symbol: string): Promise<number> {
     try {
       // Get basic options data to retrieve current price from quote
-      const data = await YahooFinance.options(symbol, { formatted: true });
+      const data = await yahooFinance.options(symbol, { formatted: true });
       const currentPrice = data.quote?.regularMarketPrice ?? 0;
 
       return currentPrice;
@@ -231,7 +234,7 @@ export class OptionsService {
       console.log(`Fetching fresh data for ${symbol} from external API`);
       
       // Get base options data to retrieve current price and available expiration dates
-      const baseData = await YahooFinance.options(symbol, { formatted: true });
+      const baseData = await yahooFinance.options(symbol, { formatted: true });
       const currentPrice = baseData.quote?.regularMarketPrice ?? 0;
 
       // Get available expiration dates
@@ -242,7 +245,7 @@ export class OptionsService {
       
       for (const date of expirationDates) {
         try {
-          const dateOptionsData = await YahooFinance.options(symbol, {
+          const dateOptionsData = await yahooFinance.options(symbol, {
             date: date,
             formatted: true,
           });
@@ -300,7 +303,7 @@ export class OptionsService {
 
   private async getAvailableExpirationDates(symbol: string): Promise<Date[]> {
     try {
-      const optionsData = await YahooFinance.options(symbol, {});
+      const optionsData = await yahooFinance.options(symbol, {});
       return optionsData.expirationDates.map(dateStr => new Date(dateStr));
     } catch (error) {
       console.error(`Error fetching expiration dates for ${symbol}:`, error);

@@ -26,7 +26,7 @@
     "graphql-request": "^7.1.0",
     "jsdom": "^25.0.1",
     "typescript": "^5.5.4",
-    "yahoo-finance2": "^2.13.3"
+    "yahoo-finance2": "^4.0.3"
   },
   "devDependencies": {
     "@astrojs/tailwind": "^6.0.0",
