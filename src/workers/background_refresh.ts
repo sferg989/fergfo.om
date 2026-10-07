@@ -33,6 +33,14 @@ export default {
 
       if (!isMarketOpen) {
         console.log('[WORKER] Outside market hours (9:30 AM - 4:00 PM ET, Mon-Fri), skipping refresh');
+        // Settle expired contracts while the market is closed, a few times an hour
+        if (now.getMinutes() % 10 === 0) {
+          try {
+            await refreshService.recordExpiredOutcomes();
+          } catch (outcomeError) {
+            console.error('[OUTCOMES ERROR]', outcomeError instanceof Error ? outcomeError.message : outcomeError);
+          }
+        }
         console.log('[WORKER] Worker will run again at next cron interval');
         return;
       }

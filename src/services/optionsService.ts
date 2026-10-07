@@ -260,6 +260,16 @@ export class OptionsService {
     console.log('Saved Yahoo session to database');
   }
 
+  /** Underlying close on the first trading day on or after `date`; undefined when Yahoo has none yet */
+  async getCloseOnDate(symbol: string, date: Date): Promise<number | undefined> {
+    await this.restoreYahooSession();
+    const period2 = new Date(date.getTime() + 4 * 24 * 60 * 60 * 1000);
+    const chart = await yahooFinance.chart(symbol, { period1: date, period2, interval: '1d' });
+    await this.persistYahooSession();
+    const close = chart.quotes.find(q => q.close !== null && q.close !== undefined)?.close;
+    return close ?? undefined;
+  }
+
   /**
    * Fetch fresh data from external API (for background refresh only)
    */

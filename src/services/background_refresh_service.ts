@@ -1,6 +1,8 @@
 import { OptionsService } from './optionsService';
 import { DatabaseService } from './database_service';
 import { isMarketHours as checkMarketHours } from '../utils/marketHoursUtils';
+import { settleShortPut } from '../utils/optionOutcome';
+import type { ExpiredContract, OptionOutcome } from '../types/database';
 
 interface SymbolTrackingRecord {
   id: string;
@@ -49,6 +51,10 @@ const SNAPSHOT_RETENTION_DAYS = 30;
 /** Stock snapshots deleted per prune call (~130 option + score rows cascade per snapshot).
  * 150+ intermittently hit D1's SQLITE_NOMEM; 100 ran clean. */
 const PRUNE_BATCH_SIZE = 100;
+/** Expired contracts settled per sweep; one Yahoo chart call per distinct symbol + expiry */
+const OUTCOME_BATCH_SIZE = 50;
+/** A contract counts as expired once its expiration day has fully closed */
+const OUTCOME_SETTLE_DELAY_MS = 24 * 60 * 60 * 1000;
 
 export class BackgroundRefreshService {
   private static instance: BackgroundRefreshService;
@@ -83,6 +89,44 @@ export class BackgroundRefreshService {
   /**
    * Get the next symbol to refresh using round-robin strategy
    */
+  /**
+   * Record what happened to contracts that have expired: the underlying's close on
+   * expiration day and the seller's realized return. Runs outside market hours.
+   * Returns the number of outcomes written.
+   */
+  async recordExpiredOutcomes(): Promise<number> {
+    const cutoff = new Date(Date.now() - OUTCOME_SETTLE_DELAY_MS).toISOString();
+    const expired = await DatabaseService.getInstance(this.db).getExpiredContractsWithoutOutcome(cutoff, OUTCOME_BATCH_SIZE);
+    if (expired.length === 0) return 0;
+
+    const closes = new Map<string, number | undefined>();
+    const outcomes: OptionOutcome[] = [];
+    for (const contract of expired) {
+      const settlementPrice = await this.settlementPriceFor(contract, closes);
+      if (settlementPrice === undefined) continue;
+      const settled = settleShortPut({ strike: contract.strike, premium: contract.firstSeenBid, settlementPrice });
+      outcomes.push({ ...contract, settlementPrice, ...settled });
+    }
+
+    await DatabaseService.getInstance(this.db).saveOptionOutcomes(outcomes);
+    console.log(`[OUTCOMES] Recorded ${outcomes.length} of ${expired.length} expired contracts`);
+    return outcomes.length;
+  }
+
+  /** One Yahoo call per symbol + expiration day, shared across that day's contracts */
+  private async settlementPriceFor(contract: ExpiredContract, closes: Map<string, number | undefined>): Promise<number | undefined> {
+    const key = `${contract.symbol}|${contract.expirationDate}`;
+    if (!closes.has(key)) {
+      try {
+        closes.set(key, await this.optionsService.getCloseOnDate(contract.symbol, new Date(contract.expirationDate)));
+      } catch (error) {
+        console.error(`[OUTCOMES] No close for ${key}:`, error instanceof Error ? error.message : error);
+        closes.set(key, undefined);
+      }
+    }
+    return closes.get(key);
+  }
+
   async getNextSymbolToRefresh(): Promise<string | null> {
     try {
       // Get current refresh state
