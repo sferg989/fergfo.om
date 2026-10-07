@@ -1,169 +1,114 @@
 import type { OptionScore } from '../types/option';
+import { ReturnCalculator } from './returnCalculator';
+import { putDelta } from './blackScholes';
 
-// Adjusted weights to sum to 100 for better score distribution
+// Weights sum to 100. The spread penalty is subtracted separately.
 const SCORE_WEIGHT = {
-  PREMIUM: 25,    // Premium as percentage of strike price
-  THETA: 20,      // Time decay rate (theta)
-  STRIKE: 15,     // Strike distance from current price
+  YIELD: 45,      // Annualized return on collateral from extrinsic premium
+  RISK: 30,       // Assignment risk, via Black-Scholes put delta
   DTE: 15,        // Days till expiration
-  IV: 15,         // Implied Volatility
   LIQUIDITY: 10,  // Volume and open interest
 } as const;
+
+/** Matches the margin basis the UI uses in optionsUtils, so both show the same yield */
+const MARGIN_RATE = 0.20;
+/** Annualized return (%) on that margin basis that earns the full yield score */
+const YIELD_CAP_PCT = 200;
+/** |delta| at or above which a put earns no risk score (at the money and beyond) */
+const RISK_DELTA_CAP = 0.5;
+/** DTE earning the full score; the score falls linearly to zero at 0 and at DTE_ZERO_UPPER */
+const DTE_PEAK = 38;
+const DTE_ZERO_UPPER = 90;
+/** Open interest + volume mix that earns the full liquidity score */
+const LIQUIDITY_CAP = 10000;
+
+const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 export type ScoreClass = 'score-excellent' | 'score-good' | 'score-moderate' | 'score-weak' | 'score-poor';
 
 export class OptionScorer {
   /**
-   * Evaluates the premium as a percentage of strike price
-   * Uses a logarithmic function to prevent excessive scaling
-   * Max score (25) reached around 5% premium with diminishing returns
+   * Annualized return on collateral, counting only extrinsic premium: an in-the-money
+   * bid is mostly intrinsic value the seller hands back on assignment.
+   * Log-scaled so the first few percent matter most.
    */
-  private static calculatePremiumScore(premiumPct: number): number {
-    // Cap at 10% premium to prevent unrealistic scores
-    const cappedPct = Math.min(premiumPct, 10);
-    return Math.min(SCORE_WEIGHT.PREMIUM, Math.log1p(cappedPct) * 8);
+  private static calculateYieldScore(extrinsicPremium: number, strike: number, dte: number): number {
+    const annualizedPct = ReturnCalculator.calculateAnnualizedReturn({
+      premium: extrinsicPremium,
+      strike,
+      daysToExpiry: dte,
+      marginRate: MARGIN_RATE,
+    });
+    const scaled = Math.log1p(Math.min(annualizedPct, YIELD_CAP_PCT)) / Math.log1p(YIELD_CAP_PCT);
+    return SCORE_WEIGHT.YIELD * scaled;
   }
 
   /**
-   * Evaluates the rate of time decay (theta)
-   * More negative theta = better score (faster time decay)
-   * Properly bounded to max score of 20
+   * Assignment risk from put delta: full score as |delta| approaches 0,
+   * nothing at the money or in the money.
    */
-  private static calculateThetaScore(theta?: number): number {
-    if (!theta) return 0;
-    
-    // Normalize theta to a reasonable range (-0.1 to 0)
-    const normalizedTheta = Math.max(-0.1, Math.min(0, theta));
-    // Convert to positive scale and bound to max score
-    return Math.min(SCORE_WEIGHT.THETA, Math.abs(normalizedTheta) * 200);
+  private static calculateRiskScore(delta: number | undefined): number {
+    if (delta === undefined) return 0;
+    const assignmentRisk = Math.min(Math.abs(delta), RISK_DELTA_CAP) / RISK_DELTA_CAP;
+    return SCORE_WEIGHT.RISK * (1 - assignmentRisk);
   }
 
-  /**
-   * Evaluates how far the strike price is from current price
-   * Closer to current price = better score
-   * Each 1% away from current price reduces score by 1.5 points
-   */
-  private static calculateStrikeScore(strikeDistance: number): number {
-    return Math.max(0, SCORE_WEIGHT.STRIKE - (strikeDistance * 150));
-  }
-
-  /**
-   * Evaluates the days till expiration (DTE)
-   * Optimal range is 30-45 DTE with peak at 35-40
-   * Gradual decay outside optimal range
-   */
+  /** Single triangle: zero at expiry, full at DTE_PEAK, zero again at DTE_ZERO_UPPER */
   private static calculateDteScore(dte: number): number {
-    const maxScore = SCORE_WEIGHT.DTE;
-
-    if (dte < 25) {
-      // Too close to expiration - rapid score decay
-      return Math.max(0, maxScore - (25 - dte) * 1.5);
-    } else if (dte > 50) {
-      // Too far from expiration - gradual score decay
-      return Math.max(0, maxScore - (dte - 50) * 0.5);
-    } else if (dte >= 30 && dte <= 45) {
-      // Optimal range - full score with slight variation
-      return maxScore - Math.abs(dte - 37.5) * 0.2;
-    } else {
-      // Transition zones - linear interpolation
-      if (dte < 30) {
-        return maxScore - (30 - dte) * 0.8;
-      } else {
-        return maxScore - (dte - 45) * 0.8;
-      }
-    }
+    if (dte <= 0) return 0;
+    const fraction = dte <= DTE_PEAK
+      ? dte / DTE_PEAK
+      : Math.max(0, (DTE_ZERO_UPPER - dte) / (DTE_ZERO_UPPER - DTE_PEAK));
+    return SCORE_WEIGHT.DTE * fraction;
   }
 
-  /**
-   * Evaluates the implied volatility (IV)
-   * Higher IV leads to higher premiums, which is favorable for sellers
-   * Max score for IV >= 60% with diminishing returns
-   */
-  private static calculateIvScore(iv: number): number {
-    // Yahoo reports IV as a fraction (0.45 = 45%); convert to percent before scoring
-    const ivPct = iv * 100;
-    // Cap IV at 100% to prevent unrealistic scores
-    const cappedIv = Math.min(ivPct, 100);
-    // Linear scale, max score at 60% IV
-    return Math.min(SCORE_WEIGHT.IV, (cappedIv / 60) * SCORE_WEIGHT.IV);
-  }
-
-  /**
-   * Evaluates liquidity based on volume and open interest
-   * Uses a logarithmic scale with proper bounds
-   */
+  /** Log-scaled open interest and volume, weighted toward open interest */
   private static calculateLiquidityScore(volume?: number, openInterest?: number): number {
-    const vol = volume || 0;
-    const oi = openInterest || 0;
-    
-    // Combine volume and open interest with more weight on open interest
-    const liquidityMetric = Math.log1p(oi * 0.8 + vol * 0.2);
-    
-    // Scale to max score with proper bounds
-    // Cap at reasonable liquidity levels to prevent excessive scoring
-    const maxLiquidity = Math.log1p(10000); // Cap at 10k contracts
-    const normalizedLiquidity = Math.min(liquidityMetric, maxLiquidity);
-    
-    return Math.min(SCORE_WEIGHT.LIQUIDITY, (normalizedLiquidity / maxLiquidity) * SCORE_WEIGHT.LIQUIDITY);
+    const liquidity = Math.log1p((openInterest ?? 0) * 0.8 + (volume ?? 0) * 0.2);
+    const scaled = Math.min(liquidity, Math.log1p(LIQUIDITY_CAP)) / Math.log1p(LIQUIDITY_CAP);
+    return SCORE_WEIGHT.LIQUIDITY * scaled;
   }
 
-  /**
-   * Penalizes options with a wide bid-ask spread
-   * A spread wider than 8% of the ask price will receive a penalty
-   * Penalty is capped to prevent excessive score reduction
-   */
+  /** Spread wider than 8% of the ask is penalised, up to 15 points */
   private static calculateSpreadPenalty(bid: number, ask: number): number {
     if (ask === 0) return 0;
-    
-    const spread = ask - bid;
-    const spreadPct = spread / ask;
-    
-    // Penalty starts at 8% spread, max penalty of 15 points
+    const spreadPct = (ask - bid) / ask;
     if (spreadPct <= 0.08) return 0;
-    
-    const penalty = Math.min(15, (spreadPct - 0.08) * 200);
-    return penalty;
+    return Math.min(15, (spreadPct - 0.08) * 200);
   }
 
   static calculateScore(option: {
     bid: number;
     ask: number;
     strike: number;
-    theta?: number;
     expirationDate: string;
     impliedVolatility: number;
     volume?: number;
     openInterest?: number;
   }, currentPrice: number): OptionScore {
     const dte = Math.ceil(
-      (new Date(option.expirationDate).getTime() - new Date().getTime()) /
-      (1000 * 60 * 60 * 24)
+      (new Date(option.expirationDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
     );
 
-    const premiumPct = (option.bid / option.strike) * 100;
-    const strikeDistance = Math.abs(1 - (option.strike / currentPrice));
+    const intrinsic = Math.max(0, option.strike - currentPrice);
+    const extrinsicPremium = Math.max(0, option.bid - intrinsic);
+    const delta = putDelta(currentPrice, option.strike, dte, option.impliedVolatility);
 
-    const premiumScore = this.calculatePremiumScore(premiumPct);
-    const thetaScore = this.calculateThetaScore(option.theta);
-    const strikeScore = this.calculateStrikeScore(strikeDistance);
+    const yieldScore = this.calculateYieldScore(extrinsicPremium, option.strike, dte);
+    const riskScore = this.calculateRiskScore(delta);
     const dteScore = this.calculateDteScore(dte);
-    const ivScore = this.calculateIvScore(option.impliedVolatility);
     const liquidityScore = this.calculateLiquidityScore(option.volume, option.openInterest);
     const spreadPenalty = this.calculateSpreadPenalty(option.bid, option.ask);
 
-    // Calculate total score with proper bounds
-    const rawTotal = premiumScore + thetaScore + strikeScore + dteScore + ivScore + liquidityScore - spreadPenalty;
-    const total = Math.max(0, Math.min(100, rawTotal));
+    const rawTotal = yieldScore + riskScore + dteScore + liquidityScore - spreadPenalty;
 
     return {
-      total: Math.round(total * 100) / 100, // Round to 2 decimal places
-      premiumScore: Math.round(premiumScore * 100) / 100,
-      thetaScore: Math.round(thetaScore * 100) / 100,
-      strikeScore: Math.round(strikeScore * 100) / 100,
-      dteScore: Math.round(dteScore * 100) / 100,
-      ivScore: Math.round(ivScore * 100) / 100,
-      liquidityScore: Math.round(liquidityScore * 100) / 100,
-      spreadPenalty: Math.round(spreadPenalty * 100) / 100,
+      total: round2(Math.max(0, Math.min(100, rawTotal))),
+      yieldScore: round2(yieldScore),
+      riskScore: round2(riskScore),
+      dteScore: round2(dteScore),
+      liquidityScore: round2(liquidityScore),
+      spreadPenalty: round2(spreadPenalty),
     };
   }
 

@@ -31,10 +31,11 @@ export interface OptionScoreSnapshot {
   id: string;
   optionSnapshotId: string; // foreign key to OptionSnapshot
   totalScore: number;
-  premiumScore: number;
-  thetaScore: number;
-  strikeScore: number;
+  yieldScore: number;
+  riskScore: number;
   dteScore: number;
+  liquidityScore: number;
+  spreadPenalty: number;
   createdAt?: string;
 }
 
@@ -82,4 +83,20 @@ export interface TopPerformingOption {
   bestBid: number;
   bestAsk: number;
   snapshotCount: number;
+}
+/** A contract past expiry with no outcome row yet, plus its oldest surviving snapshot */
+export interface ExpiredContract {
+  contractName: string;
+  symbol: string;
+  strike: number;
+  expirationDate: string;
+  firstSeenAt: string;
+  firstSeenBid: number;
+  firstSeenScore: number | null;
+}
+
+export interface OptionOutcome extends ExpiredContract {
+  settlementPrice: number;
+  expiredOtm: boolean;
+  realizedReturn: number;
 }

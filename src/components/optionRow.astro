@@ -18,10 +18,10 @@ const expiryDate = formatContractName(option.contractName);
   <td class="score-cell">
     <div class="score-value">{score.total.toFixed(0)}</div>
     <div class="score-breakdown">
-      <span class="premium">P: {score.premiumScore.toFixed(1)}</span>
-      <span class="theta">θ: {score.thetaScore.toFixed(1)}</span>
-      <span class="strike">S: {score.strikeScore.toFixed(1)}</span>
+      <span class="premium">Y: {score.yieldScore.toFixed(1)}</span>
+      <span class="theta">Δ: {score.riskScore.toFixed(1)}</span>
       <span class="dte">T: {score.dteScore.toFixed(1)}</span>
+      <span class="strike">L: {score.liquidityScore.toFixed(1)}</span>
     </div>
   </td>
   {showExpiry && <td class="expiry-cell">{expiryDate}</td>}

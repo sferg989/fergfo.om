@@ -19,11 +19,9 @@ export interface ScoredOption extends OptionData {
 
 export interface OptionScore {
   total: number;
-  premiumScore: number;
-  thetaScore: number;
-  strikeScore: number;
+  yieldScore: number;
+  riskScore: number;
   dteScore: number;
-  ivScore: number;
   liquidityScore: number;
   spreadPenalty: number;
 }

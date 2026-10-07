@@ -6,6 +6,7 @@ import type {
   TopPerformingOption
 } from '../types/database';
 import type { OptionData, OptionScore } from '../types/option';
+import type { ExpiredContract, OptionOutcome } from '../types/database';
 
 /** Statements per D1 batch call */
 const BATCH_SIZE = 100;
@@ -102,19 +103,20 @@ export class DatabaseService {
     const now = new Date().toISOString();
     const insert = this.db.prepare(`
       INSERT INTO option_score_snapshots (
-        id, option_snapshot_id, total_score, premium_score,
-        theta_score, strike_score, dte_score, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        id, option_snapshot_id, total_score, yield_score,
+        risk_score, dte_score, liquidity_score, spread_penalty, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const statements = scores.map((score, i) => insert.bind(
       crypto.randomUUID(),
       optionSnapshotIds[i],
       score.total,
-      score.premiumScore,
-      score.thetaScore,
-      score.strikeScore,
+      score.yieldScore,
+      score.riskScore,
       score.dteScore,
+      score.liquidityScore,
+      score.spreadPenalty,
       now
     ));
 
@@ -180,6 +182,54 @@ export class DatabaseService {
       )
     `).bind(cutoffIso, limit).run();
     return result.meta.changes ?? 0;
+  }
+
+  /**
+   * Contracts that expired before `cutoffIso` and have no outcome row, each with its
+   * oldest surviving snapshot. SQLite's bare-column rule makes the MIN() row supply the
+   * non-aggregated columns.
+   */
+  async getExpiredContractsWithoutOutcome(cutoffIso: string, limit: number): Promise<ExpiredContract[]> {
+    const result = await this.db.prepare(`
+      SELECT os.contract_name, ss.symbol, os.strike, os.expiration_date,
+             os.bid, oss.total_score, MIN(ss.created_at) AS first_seen_at
+      FROM option_snapshots os
+      JOIN stock_snapshots ss ON ss.id = os.snapshot_id
+      LEFT JOIN option_score_snapshots oss ON oss.option_snapshot_id = os.id
+      WHERE os.expiration_date < ?
+        AND NOT EXISTS (SELECT 1 FROM option_outcomes oo WHERE oo.contract_name = os.contract_name)
+      GROUP BY os.contract_name
+      ORDER BY os.expiration_date
+      LIMIT ?
+    `).bind(cutoffIso, limit).all();
+
+    return result.results.map((row: unknown) => {
+      const r = row as Record<string, unknown>;
+      return {
+        contractName: r.contract_name as string,
+        symbol: r.symbol as string,
+        strike: r.strike as number,
+        expirationDate: r.expiration_date as string,
+        firstSeenAt: r.first_seen_at as string,
+        firstSeenBid: r.bid as number,
+        firstSeenScore: (r.total_score as number | null) ?? null
+      };
+    });
+  }
+
+  async saveOptionOutcomes(outcomes: OptionOutcome[]): Promise<void> {
+    if (outcomes.length === 0) return;
+    const now = new Date().toISOString();
+    const insert = this.db.prepare(`
+      INSERT OR IGNORE INTO option_outcomes (
+        contract_name, symbol, strike, expiration_date, settlement_price, expired_otm,
+        first_seen_at, first_seen_bid, first_seen_score, realized_return, recorded_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    await this.runInBatches(outcomes.map(o => insert.bind(
+      o.contractName, o.symbol, o.strike, o.expirationDate, o.settlementPrice, o.expiredOtm ? 1 : 0,
+      o.firstSeenAt, o.firstSeenBid, o.firstSeenScore, o.realizedReturn, now
+    )));
   }
 
   /**
@@ -267,8 +317,8 @@ export class DatabaseService {
       SELECT 
         os.*,
         ss.symbol, ss.current_price, ss.fetched_at, ss.source,
-        oss.total_score, oss.premium_score, oss.theta_score, 
-        oss.strike_score, oss.dte_score
+        oss.total_score, oss.yield_score, oss.risk_score,
+        oss.dte_score, oss.liquidity_score, oss.spread_penalty
       FROM option_snapshots os
       JOIN stock_snapshots ss ON os.snapshot_id = ss.id
       LEFT JOIN option_score_snapshots oss ON os.id = oss.option_snapshot_id
@@ -307,10 +357,11 @@ export class DatabaseService {
           id: '',
           optionSnapshotId: r.id as string,
           totalScore: r.total_score as number,
-          premiumScore: r.premium_score as number,
-          thetaScore: r.theta_score as number,
-          strikeScore: r.strike_score as number,
-          dteScore: r.dte_score as number
+          yieldScore: r.yield_score as number,
+          riskScore: r.risk_score as number,
+          dteScore: r.dte_score as number,
+          liquidityScore: r.liquidity_score as number,
+          spreadPenalty: r.spread_penalty as number
         } : undefined
       } as HistoricalOptionData;
     });
