@@ -8,14 +8,15 @@
     "build": "astro check && astro build",
     "preview": "astro preview",
     "lint": "eslint --fix \"src/**/*.{js,ts,jsx,tsx,astro}\"",
-    "all": "astro check && eslint --fix \"src/**/*.{js,ts,jsx,tsx,astro}\"",
+    "all": "astro check && eslint --fix \"src/**/*.{js,ts,jsx,tsx,astro}\" && vitest run",
     "astro:check": "astro check",
     "astro": "astro",
     "worker:dev": "wrangler dev --config wrangler.background.toml",
     "worker:deploy": "wrangler deploy --config wrangler.background.toml",
     "worker:deploy:prod": "wrangler deploy --config wrangler.background.toml --env production",
     "db:migrate": "wrangler d1 migrations apply options-tracker-local --local",
-    "db:migrate:prod": "wrangler d1 migrations apply options-tracker --env production --remote"
+    "db:migrate:prod": "wrangler d1 migrations apply options-tracker --env production --remote",
+    "test": "vitest run"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.4",
@@ -39,6 +40,7 @@
     "eslint-plugin-astro": "^1.2.3",
     "eslint-plugin-jsx-a11y": "^6.9.0",
     "postcss": "^8.5.1",
-    "tailwindcss": "^3.4.17"
+    "tailwindcss": "^3.4.17",
+    "vitest": "^4.1.11"
   }
 }
