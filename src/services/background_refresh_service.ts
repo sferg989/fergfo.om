@@ -37,6 +37,12 @@ interface NextSymbolResult {
 
 /** Consecutive failures before a symbol is removed from the rotation */
 const MAX_CONSECUTIVE_ERRORS = 5;
+/**
+ * Errors Yahoo raises before it has looked at the symbol: a rate limit or a failed
+ * cookie/crumb handshake. Counting these against the symbol deactivated every symbol
+ * during a provider-wide 429 on 2026-10-07.
+ */
+const PROVIDER_ERROR = /Failed to get crumb|Too Many Requests|status 429/;
 
 /** History endpoints look back 30 days; anything older is dead weight against the D1 size limit */
 const SNAPSHOT_RETENTION_DAYS = 30;
@@ -151,6 +157,14 @@ export class BackgroundRefreshService {
       const duration = Date.now() - startTime;
 
       if (result.error) {
+        if (PROVIDER_ERROR.test(result.error)) {
+          await this.updateSymbolTracking(symbol, { last_error: result.error, updated_at: now });
+          await this.advanceRefreshPosition(symbol, now);
+          console.error(`[REFRESH ERROR] ${symbol} skipped after ${duration}ms, Yahoo rejected the request: ${result.error}`);
+          console.error('[REFRESH ERROR] Provider error, not counted against the symbol');
+          return { success: false, error: result.error, details: { duration } };
+        }
+
         const errorCount = await this.recordRefreshError(symbol, result.error, now);
 
         console.error(`[REFRESH ERROR] ${symbol} failed after ${duration}ms: ${result.error}`);
