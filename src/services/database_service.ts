@@ -151,6 +151,19 @@ export class DatabaseService {
     return snapshotId;
   }
 
+  /** Serialized Yahoo cookie jar saved by a previous worker run, or null if none yet. */
+  async getYahooSession(): Promise<string | null> {
+    const row = await this.db.prepare(`SELECT cookie_jar FROM yahoo_session WHERE id = 'main'`).first<{ cookie_jar: string }>();
+    return row?.cookie_jar ?? null;
+  }
+
+  async saveYahooSession(cookieJar: string): Promise<void> {
+    await this.db.prepare(`
+      INSERT INTO yahoo_session (id, cookie_jar, updated_at) VALUES ('main', ?, ?)
+      ON CONFLICT(id) DO UPDATE SET cookie_jar = excluded.cookie_jar, updated_at = excluded.updated_at
+    `).bind(cookieJar, new Date().toISOString()).run();
+  }
+
   /**
    * Delete the oldest stock snapshots created before `cutoffIso`, at most `limit` per call.
    * Option and score rows go with them via ON DELETE CASCADE. Returns total rows deleted,

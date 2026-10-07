@@ -1,9 +1,16 @@
 import { DatabaseService } from './database_service';
 import { OptionScorer } from '../utils/optionScorer';
 import YahooFinance from 'yahoo-finance2';
+import { ExtendedCookieJar } from 'yahoo-finance2/lib/cookieJar';
 
 // yahoo-finance2 v3+ is instance-based; one shared client keeps the cookie/crumb session.
-const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
+// The jar is restored from D1 before fresh fetches so every worker isolate reuses one
+// Yahoo session instead of re-running the rate-limited crumb handshake.
+let cookieJar = new ExtendedCookieJar();
+let yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'], cookieJar });
+/** Serialized form of the jar as last loaded from or saved to D1 */
+let storedCookieJar: string | null = null;
+let sessionRestored = false;
 
 export interface OptionData {
   contractName: string;
@@ -226,16 +233,40 @@ export class OptionsService {
     };
   }
 
+  /** Load the shared Yahoo session from D1 once per isolate. */
+  private async restoreYahooSession(): Promise<void> {
+    if (sessionRestored || !this.dbService) return;
+    sessionRestored = true;
+    storedCookieJar = await this.dbService.getYahooSession();
+    if (!storedCookieJar) return;
+    cookieJar = new ExtendedCookieJar();
+    cookieJar._importCookiesSync(JSON.parse(storedCookieJar));
+    yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'], cookieJar });
+    console.log('Restored Yahoo session from database');
+  }
+
+  /** Write the Yahoo session back to D1 when Yahoo handed out new cookies or a new crumb. */
+  private async persistYahooSession(): Promise<void> {
+    if (!this.dbService) return;
+    const serialized = JSON.stringify(await cookieJar.serialize());
+    if (serialized === storedCookieJar) return;
+    await this.dbService.saveYahooSession(serialized);
+    storedCookieJar = serialized;
+    console.log('Saved Yahoo session to database');
+  }
+
   /**
    * Fetch fresh data from external API (for background refresh only)
    */
   async fetchFreshOptionsData(symbol: string): Promise<{ options: OptionData[]; currentPrice: number; fetchedAt?: string; error?: string }> {
     try {
       console.log(`Fetching fresh data for ${symbol} from external API`);
-      
+      await this.restoreYahooSession();
+
       // Get base options data to retrieve current price and available expiration dates
       const baseData = await yahooFinance.options(symbol, { formatted: true });
       const currentPrice = baseData.quote?.regularMarketPrice ?? 0;
+      await this.persistYahooSession();
 
       // Get available expiration dates
       const expirationDates = await this.getAvailableExpirationDates(symbol);
