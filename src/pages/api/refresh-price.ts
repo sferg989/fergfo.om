@@ -1,13 +1,14 @@
 import type { APIRoute } from 'astro';
 import { OptionsService } from '../../services/optionsService';
+import { isValidSymbol } from '../../utils/optionsUtils';
 
 export const GET: APIRoute = async ({ request, locals }) => {
   try {
     const url = new URL(request.url);
     const symbol = url.searchParams.get('symbol');
 
-    if (!symbol) {
-      return new Response(JSON.stringify({ error: 'Symbol parameter is required' }), {
+    if (!symbol || !isValidSymbol(symbol)) {
+      return new Response(JSON.stringify({ error: 'A valid symbol parameter is required' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });

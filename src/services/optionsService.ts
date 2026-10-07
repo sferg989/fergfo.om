@@ -1,5 +1,6 @@
 import { DatabaseService } from './database_service';
 import { OptionScorer } from '../utils/optionScorer';
+import { isValidSymbol } from '../utils/optionsUtils';
 import YahooFinance from 'yahoo-finance2';
 import { ExtendedCookieJar } from 'yahoo-finance2/lib/cookieJar';
 
@@ -131,6 +132,9 @@ export class OptionsService {
   }
 
   async fetchOptionsData(symbol: string): Promise<{ options: OptionData[]; currentPrice: number; fetchedAt?: string; error?: string }> {
+    if (!isValidSymbol(symbol)) {
+      return { options: [], currentPrice: 0, error: `Invalid symbol: ${symbol}` };
+    }
     try {
       // Add symbol to tracking if database is available (for background refresh)
       if (this.dbService) {

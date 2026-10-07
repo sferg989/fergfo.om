@@ -1,6 +1,9 @@
 import { ReturnCalculator } from './returnCalculator';
 import type { OptionData, GroupedOption } from '../types/option';
 
+/** Ticker shape: 1-5 letters with an optional share-class suffix (BRK.B, BF-B). Keeps junk like `1'--` out of tracking. */
+export const isValidSymbol = (symbol: string): boolean => /^[A-Z]{1,5}([.-][A-Z]{1,2})?$/.test(symbol.toUpperCase());
+
 export const formatContractName = (contractName: string): string => {
   // Ensure the contract name is in the expected format (e.g., 'NET250131P00135000' or 'AAPL250131P00320000')
   if (!contractName || contractName.length < 15) {
