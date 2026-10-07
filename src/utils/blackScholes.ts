@@ -1,6 +1,6 @@
 /**
- * Yahoo returns implied volatility but no Greeks, so theta is derived here with
- * Black-Scholes. Rates move slowly and only nudge theta, so one is hard-coded.
+ * Yahoo returns implied volatility but no Greeks, so theta and delta are derived
+ * here with Black-Scholes. Rates move slowly and only nudge the Greeks, so one is hard-coded.
  */
 const RISK_FREE_RATE = 0.04;
 const DAYS_PER_YEAR = 365;
@@ -15,6 +15,22 @@ const normalCdf = (x: number): number => {
   return x >= 0 ? 1 - tail : tail;
 };
 
+interface BsTerms {
+  t: number;
+  d1: number;
+  d2: number;
+}
+
+/** Shared Black-Scholes terms; undefined when any input makes the model undefined */
+const bsTerms = (spot: number, strike: number, daysToExpiry: number, impliedVolatility: number): BsTerms | undefined => {
+  if (spot <= 0 || strike <= 0 || daysToExpiry <= 0 || impliedVolatility <= 0) return undefined;
+
+  const t = daysToExpiry / DAYS_PER_YEAR;
+  const volSqrtT = impliedVolatility * Math.sqrt(t);
+  const d1 = (Math.log(spot / strike) + (RISK_FREE_RATE + (impliedVolatility ** 2) / 2) * t) / volSqrtT;
+  return { t, d1, d2: d1 - volSqrtT };
+};
+
 /**
  * Daily theta of a European put, in dollars per share per calendar day.
  * Negative means the option loses value as time passes.
@@ -25,16 +41,28 @@ export const putThetaPerDay = (
   daysToExpiry: number,
   impliedVolatility: number
 ): number | undefined => {
-  if (spot <= 0 || strike <= 0 || daysToExpiry <= 0 || impliedVolatility <= 0) return undefined;
-
-  const t = daysToExpiry / DAYS_PER_YEAR;
-  const volSqrtT = impliedVolatility * Math.sqrt(t);
-  const d1 = (Math.log(spot / strike) + (RISK_FREE_RATE + (impliedVolatility ** 2) / 2) * t) / volSqrtT;
-  const d2 = d1 - volSqrtT;
+  const terms = bsTerms(spot, strike, daysToExpiry, impliedVolatility);
+  if (!terms) return undefined;
+  const { t, d1, d2 } = terms;
 
   const annualTheta =
     -(spot * normalPdf(d1) * impliedVolatility) / (2 * Math.sqrt(t)) +
     RISK_FREE_RATE * strike * Math.exp(-RISK_FREE_RATE * t) * normalCdf(-d2);
 
   return annualTheta / DAYS_PER_YEAR;
+};
+
+/**
+ * Delta of a European put, in [-1, 0]. Its magnitude is the usual put-seller
+ * proxy for the probability of finishing in the money.
+ */
+export const putDelta = (
+  spot: number,
+  strike: number,
+  daysToExpiry: number,
+  impliedVolatility: number
+): number | undefined => {
+  const terms = bsTerms(spot, strike, daysToExpiry, impliedVolatility);
+  if (!terms) return undefined;
+  return normalCdf(terms.d1) - 1;
 };
