@@ -1,6 +1,4 @@
-import { ReturnCalculator } from './returnCalculator';
-
-const MARGIN_RATE = 0.20;
+import { DEFAULT_MARGIN_RATE, ReturnCalculator } from './returnCalculator';
 
 export interface ShortPutSettlement {
   expiredOtm: boolean;
@@ -17,12 +15,11 @@ export const settleShortPut = ({ strike, premium, settlementPrice }: {
   settlementPrice: number;
 }): ShortPutSettlement => {
   const intrinsicAtExpiry = Math.max(0, strike - settlementPrice);
+  const returnPct = (amount: number) =>
+    ReturnCalculator.calculateSimpleReturn({ premium: amount, strike, marginRate: DEFAULT_MARGIN_RATE });
   return {
     expiredOtm: intrinsicAtExpiry === 0,
     realizedReturn: Math.round((premium - intrinsicAtExpiry) * 100) / 100,
-    realizedReturnPct: Math.round(
-      (ReturnCalculator.calculateSimpleReturn({ premium, strike, marginRate: MARGIN_RATE })
-        - ReturnCalculator.calculateSimpleReturn({ premium: intrinsicAtExpiry, strike, marginRate: MARGIN_RATE })) * 100
-    ) / 100,
+    realizedReturnPct: Math.round((returnPct(premium) - returnPct(intrinsicAtExpiry)) * 100) / 100,
   };
 };

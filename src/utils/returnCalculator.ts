@@ -1,3 +1,6 @@
+/** Margin basis (20% of strike) used wherever collateral is assumed */
+export const DEFAULT_MARGIN_RATE = 0.20;
+
 interface ReturnCalculatorParams {
   premium: number;      // The bid price
   strike: number;       // Strike price
@@ -9,7 +12,7 @@ export class ReturnCalculator {
   static calculateSimpleReturn({
     premium,
     strike,
-    marginRate = 0.20
+    marginRate = DEFAULT_MARGIN_RATE
   }: Omit<ReturnCalculatorParams, 'daysToExpiry'>): number {
     // Input validation
     if (strike <= 0 || premium <= 0) return 0;
@@ -26,7 +29,7 @@ export class ReturnCalculator {
     premium,
     strike,
     daysToExpiry,
-    marginRate = 0.20
+    marginRate = DEFAULT_MARGIN_RATE
   }: ReturnCalculatorParams): number {
     // Input validation
     if (daysToExpiry <= 0 || strike <= 0 || premium <= 0) return 0;

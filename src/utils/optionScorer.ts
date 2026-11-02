@@ -1,5 +1,5 @@
 import type { OptionScore } from '../types/option';
-import { ReturnCalculator } from './returnCalculator';
+import { DEFAULT_MARGIN_RATE, ReturnCalculator } from './returnCalculator';
 import { putDelta } from './blackScholes';
 
 // Weights sum to 100. The spread penalty is subtracted separately.
@@ -10,9 +10,7 @@ const SCORE_WEIGHT = {
   LIQUIDITY: 10,  // Volume and open interest
 } as const;
 
-/** Matches the margin basis the UI uses in optionsUtils, so both show the same yield */
-const MARGIN_RATE = 0.20;
-/** Annualized return (%) on that margin basis that earns the full yield score */
+/** Annualized return (%) on the default margin basis that earns the full yield score */
 const YIELD_CAP_PCT = 200;
 /** |delta| at or above which a put earns no risk score (at the money and beyond) */
 const RISK_DELTA_CAP = 0.5;
@@ -37,7 +35,7 @@ export class OptionScorer {
       premium: extrinsicPremium,
       strike,
       daysToExpiry: dte,
-      marginRate: MARGIN_RATE,
+      marginRate: DEFAULT_MARGIN_RATE,
     });
     const scaled = Math.log1p(Math.min(annualizedPct, YIELD_CAP_PCT)) / Math.log1p(YIELD_CAP_PCT);
     return SCORE_WEIGHT.YIELD * scaled;
