@@ -185,9 +185,9 @@ export class DatabaseService {
   }
 
   /**
-   * Contracts that expired before `cutoffIso` and have no outcome row, each with its
-   * oldest surviving snapshot. SQLite's bare-column rule makes the MIN() row supply the
-   * non-aggregated columns.
+   * Contracts that expired before `cutoffIso` and have no outcome row, each with the
+   * snapshot at the largest DTE <= 38 (picked via ROW_NUMBER()). Contracts never seen at
+   * or below 38 DTE fall back to their oldest surviving snapshot.
    */
   async getExpiredContractsWithoutOutcome(cutoffIso: string, limit: number): Promise<ExpiredContract[]> {
     // created_at and expiration_date are both ISO-8601 strings, which julianday() parses.
