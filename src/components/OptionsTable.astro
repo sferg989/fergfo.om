@@ -43,7 +43,7 @@ const sortedGroups = groupOptionsByExpiry(options);
         </div>
         <div class="flex items-center gap-2">
           <span class="price-range" id="price-range">
-            Range: ${(currentPrice * 0.9).toFixed(2)} - ${(currentPrice * 1.1).toFixed(2)}
+            Puts 5–50Δ
           </span>
           {fetchedAt && (
             <span class="last-updated" id="last-updated">
@@ -183,17 +183,11 @@ const sortedGroups = groupOptionsByExpiry(options);
 
         // Update the price display
         const priceElement = document.getElementById('current-price');
-        const priceRangeElement = document.getElementById('price-range');
         const lastUpdatedElement = document.getElementById('last-updated');
 
         if (priceElement && data.currentPrice) {
           const newPrice = data.currentPrice;
           priceElement.textContent = `Current Price: $${newPrice.toFixed(4)}`;
-
-          // Update price range
-          if (priceRangeElement) {
-            priceRangeElement.textContent = `Range: $${(newPrice * 0.9).toFixed(2)} - $${(newPrice * 1.1).toFixed(2)}`;
-          }
 
           // Update last updated time
           if (lastUpdatedElement && data.fetchedAt) {

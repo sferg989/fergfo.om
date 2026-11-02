@@ -1,6 +1,6 @@
 import { DatabaseService } from './database_service';
 import { OptionScorer } from '../utils/optionScorer';
-import { isValidSymbol } from '../utils/optionsUtils';
+import { isValidSymbol, isStrikeInDeltaBand } from '../utils/optionsUtils';
 import { putThetaPerDay } from '../utils/blackScholes';
 import YahooFinance from 'yahoo-finance2';
 import { ExtendedCookieJar } from 'yahoo-finance2/lib/cookieJar';
@@ -358,22 +358,16 @@ export class OptionsService {
   }
 
   private transformYahooOptionsData(puts: YahooOptionData[], currentPrice: number, expirationDate: Date): OptionData[] {
-    const priceRange = {
-      min: currentPrice * 0.9,
-      max: currentPrice * 1.1
-    };
+    const daysToExpiry = Math.ceil(
+      (expirationDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+    );
 
     return puts
       .filter(option => {
-        // Ensure we have valid strike price and some bid/ask data
-        return option.strike >= priceRange.min && 
-               option.strike <= priceRange.max &&
+        return isStrikeInDeltaBand(currentPrice, option.strike, daysToExpiry, option.impliedVolatility) &&
                (option.bid ?? 0) > 0; // Only include options with meaningful bid prices
       })
       .map((option): OptionData => {
-        const daysToExpiry = Math.ceil(
-          (expirationDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
-        );
         const estimatedTheta = putThetaPerDay(currentPrice, option.strike, daysToExpiry, option.impliedVolatility ?? 0);
 
         return {
