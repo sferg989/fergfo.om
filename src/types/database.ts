@@ -84,12 +84,13 @@ export interface TopPerformingOption {
   bestAsk: number;
   snapshotCount: number;
 }
-/** A contract past expiry with no outcome row yet, plus its oldest surviving snapshot */
+/** A contract past expiry with no outcome row yet, plus its snapshot at the largest DTE <= 38 (fallback: oldest surviving) */
 export interface ExpiredContract {
   contractName: string;
   symbol: string;
   strike: number;
   expirationDate: string;
+  /** Time of the snapshot at the largest DTE <= 38 (fallback: oldest surviving); same for the two fields below */
   firstSeenAt: string;
   firstSeenBid: number;
   firstSeenScore: number | null;
@@ -99,4 +100,5 @@ export interface OptionOutcome extends ExpiredContract {
   settlementPrice: number;
   expiredOtm: boolean;
   realizedReturn: number;
+  realizedReturnPct: number;
 }

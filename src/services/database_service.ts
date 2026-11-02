@@ -190,16 +190,28 @@ export class DatabaseService {
    * non-aggregated columns.
    */
   async getExpiredContractsWithoutOutcome(cutoffIso: string, limit: number): Promise<ExpiredContract[]> {
+    // created_at and expiration_date are both ISO-8601 strings, which julianday() parses.
+    // Pick the snapshot at the largest DTE <= 38; contracts never seen that close fall back to the oldest.
     const result = await this.db.prepare(`
-      SELECT os.contract_name, ss.symbol, os.strike, os.expiration_date,
-             os.bid, oss.total_score, MIN(ss.created_at) AS first_seen_at
-      FROM option_snapshots os
-      JOIN stock_snapshots ss ON ss.id = os.snapshot_id
-      LEFT JOIN option_score_snapshots oss ON oss.option_snapshot_id = os.id
-      WHERE os.expiration_date < ?
-        AND NOT EXISTS (SELECT 1 FROM option_outcomes oo WHERE oo.contract_name = os.contract_name)
-      GROUP BY os.contract_name
-      ORDER BY os.expiration_date
+      SELECT contract_name, symbol, strike, expiration_date, bid, total_score, first_seen_at
+      FROM (
+        SELECT os.contract_name, ss.symbol, os.strike, os.expiration_date, os.bid, oss.total_score,
+               ss.created_at AS first_seen_at,
+               ROW_NUMBER() OVER (
+                 PARTITION BY os.contract_name
+                 ORDER BY (julianday(os.expiration_date) - julianday(ss.created_at)) > 38,
+                          CASE WHEN julianday(os.expiration_date) - julianday(ss.created_at) <= 38
+                               THEN julianday(os.expiration_date) - julianday(ss.created_at) END DESC,
+                          ss.created_at ASC
+               ) AS rn
+        FROM option_snapshots os
+        JOIN stock_snapshots ss ON ss.id = os.snapshot_id
+        LEFT JOIN option_score_snapshots oss ON oss.option_snapshot_id = os.id
+        WHERE os.expiration_date < ?
+          AND NOT EXISTS (SELECT 1 FROM option_outcomes oo WHERE oo.contract_name = os.contract_name)
+      )
+      WHERE rn = 1
+      ORDER BY expiration_date
       LIMIT ?
     `).bind(cutoffIso, limit).all();
 
@@ -223,12 +235,12 @@ export class DatabaseService {
     const insert = this.db.prepare(`
       INSERT OR IGNORE INTO option_outcomes (
         contract_name, symbol, strike, expiration_date, settlement_price, expired_otm,
-        first_seen_at, first_seen_bid, first_seen_score, realized_return, recorded_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        first_seen_at, first_seen_bid, first_seen_score, realized_return, realized_return_pct, recorded_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     await this.runInBatches(outcomes.map(o => insert.bind(
       o.contractName, o.symbol, o.strike, o.expirationDate, o.settlementPrice, o.expiredOtm ? 1 : 0,
-      o.firstSeenAt, o.firstSeenBid, o.firstSeenScore, o.realizedReturn, now
+      o.firstSeenAt, o.firstSeenBid, o.firstSeenScore, o.realizedReturn, o.realizedReturnPct, now
     )));
   }
 
