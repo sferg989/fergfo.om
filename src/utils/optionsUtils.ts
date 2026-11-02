@@ -115,7 +115,9 @@ export const getThetaClass = (theta: number | undefined): string => {
   if (theta <= -0.01) return 'theta-moderate';      // Moderate decay
   if (theta < 0) return 'theta-weak';               // Weak decay
   return 'theta-unfavorable';                       // No decay or positive theta
-}; 
+};
+
+/** True when the put's |delta| lies within [MIN_PUT_DELTA, MAX_PUT_DELTA], or within the fallback range of spot when delta is unavailable */
 export const isStrikeInDeltaBand = (currentPrice: number, strike: number, dte: number, iv: number | undefined): boolean => {
   const delta = putDelta(currentPrice, strike, dte, iv ?? 0);
   if (delta === undefined) {
