@@ -46,8 +46,11 @@ const MAX_CONSECUTIVE_ERRORS = 5;
  */
 const PROVIDER_ERROR = /Failed to get crumb|Too Many Requests|status 429/;
 
-/** History endpoints look back 30 days; anything older is dead weight against the D1 size limit */
-const SNAPSHOT_RETENTION_DAYS = 30;
+/**
+ * Outcomes are recorded a day after expiry from the snapshot nearest 38 DTE, so that
+ * snapshot must survive 39 days. History endpoints only look back 30.
+ */
+const SNAPSHOT_RETENTION_DAYS = 40;
 /** Stock snapshots deleted per prune call (~130 option + score rows cascade per snapshot).
  * 150+ intermittently hit D1's SQLITE_NOMEM; 100 ran clean. */
 const PRUNE_BATCH_SIZE = 100;
