@@ -2,8 +2,12 @@ import { DatabaseService } from './database_service';
 import { OptionScorer } from '../utils/optionScorer';
 import { isValidSymbol, isStrikeInDeltaBand } from '../utils/optionsUtils';
 import { putThetaPerDay } from '../utils/blackScholes';
+import { realizedVolatility } from '../utils/realizedVolatility';
 import YahooFinance from 'yahoo-finance2';
 import { ExtendedCookieJar } from 'yahoo-finance2/lib/cookieJar';
+
+/** Daily closes used for realized volatility; a trading month, within snapshot retention */
+const REALIZED_VOL_WINDOW_DAYS = 30;
 
 // yahoo-finance2 v3+ is instance-based; one shared client keeps the cookie/crumb session.
 // The jar is restored from D1 before fresh fetches so every worker isolate reuses one
@@ -132,7 +136,7 @@ export class OptionsService {
     }
   }
 
-  async fetchOptionsData(symbol: string): Promise<{ options: OptionData[]; currentPrice: number; fetchedAt?: string; error?: string }> {
+  async fetchOptionsData(symbol: string): Promise<{ options: OptionData[]; currentPrice: number; realizedVol?: number; fetchedAt?: string; error?: string }> {
     if (!isValidSymbol(symbol)) {
       return { options: [], currentPrice: 0, error: `Invalid symbol: ${symbol}` };
     }
@@ -152,6 +156,7 @@ export class OptionsService {
           return {
             options: cachedData.options,
             currentPrice: cachedData.currentPrice,
+            realizedVol: await this.getRealizedVol(symbol),
             fetchedAt: cachedData.fetchedAt
           };
         }
@@ -174,6 +179,20 @@ export class OptionsService {
         fetchedAt: undefined,
         error: `Failed to fetch options data: ${errorMessage}` 
       };
+    }
+  }
+
+  /**
+   * Annualized realized volatility from the stored daily closes; undefined until enough days exist.
+   * The scorer prices expected assignment loss at this rather than the option's own IV.
+   */
+  private async getRealizedVol(symbol: string): Promise<number | undefined> {
+    if (!this.dbService) return undefined;
+    try {
+      return realizedVolatility(await this.dbService.getDailyCloses(symbol, REALIZED_VOL_WINDOW_DAYS));
+    } catch (error) {
+      console.warn(`Realized vol unavailable for ${symbol}:`, error instanceof Error ? error.message : error);
+      return undefined;
     }
   }
 
@@ -273,7 +292,7 @@ export class OptionsService {
   /**
    * Fetch fresh data from external API (for background refresh only)
    */
-  async fetchFreshOptionsData(symbol: string): Promise<{ options: OptionData[]; currentPrice: number; fetchedAt?: string; error?: string }> {
+  async fetchFreshOptionsData(symbol: string): Promise<{ options: OptionData[]; currentPrice: number; realizedVol?: number; fetchedAt?: string; error?: string }> {
     try {
       console.log(`Fetching fresh data for ${symbol} from external API`);
       await this.restoreYahooSession();
@@ -313,8 +332,9 @@ export class OptionsService {
       // Save to database if available
       if (this.dbService && allOptions.length > 0) {
         try {
-          const scores = allOptions.map(option => 
-            OptionScorer.calculateScore(option, currentPrice)
+          const realizedVol = await this.getRealizedVol(symbol);
+          const scores = allOptions.map(option =>
+            OptionScorer.calculateScore(option, currentPrice, realizedVol)
           );
           
           await this.dbService.saveCompleteSnapshot(

@@ -19,8 +19,7 @@ export interface ScoredOption extends OptionData {
 
 export interface OptionScore {
   total: number;
-  yieldScore: number;
-  riskScore: number;
+  expectedReturnScore: number;
   dteScore: number;
   liquidityScore: number;
   spreadPenalty: number;
@@ -39,6 +38,8 @@ export interface StockOptionsData {
   symbol: string;
   options: OptionData[];
   currentPrice: number;
+  /** Annualized realized volatility of the underlying, when enough daily closes exist */
+  realizedVol?: number;
   fetchedAt?: string;
   error?: string;
 } 

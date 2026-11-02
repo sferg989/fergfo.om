@@ -66,3 +66,21 @@ export const putDelta = (
   if (!terms) return undefined;
   return normalCdf(terms.d1) - 1;
 };
+
+/**
+ * Risk-neutral expected intrinsic value of a put at expiry, E[max(K - S_T, 0)], per share.
+ * Undiscounted, since the premium is received up front and the loss lands at expiry.
+ * Evaluated at `volatility`, which need not be the option's own implied volatility:
+ * at the option's IV this equals its fair price and says nothing about edge.
+ */
+export const putExpectedAssignmentLoss = (
+  spot: number,
+  strike: number,
+  daysToExpiry: number,
+  volatility: number
+): number | undefined => {
+  const terms = bsTerms(spot, strike, daysToExpiry, volatility);
+  if (!terms) return undefined;
+  const { t, d1, d2 } = terms;
+  return strike * normalCdf(-d2) - spot * Math.exp(RISK_FREE_RATE * t) * normalCdf(-d1);
+};

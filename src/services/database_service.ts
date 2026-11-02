@@ -103,17 +103,16 @@ export class DatabaseService {
     const now = new Date().toISOString();
     const insert = this.db.prepare(`
       INSERT INTO option_score_snapshots (
-        id, option_snapshot_id, total_score, yield_score,
-        risk_score, dte_score, liquidity_score, spread_penalty, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, option_snapshot_id, total_score, expected_return_score,
+        dte_score, liquidity_score, spread_penalty, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const statements = scores.map((score, i) => insert.bind(
       crypto.randomUUID(),
       optionSnapshotIds[i],
       score.total,
-      score.yieldScore,
-      score.riskScore,
+      score.expectedReturnScore,
       score.dteScore,
       score.liquidityScore,
       score.spreadPenalty,
@@ -329,7 +328,7 @@ export class DatabaseService {
       SELECT 
         os.*,
         ss.symbol, ss.current_price, ss.fetched_at, ss.source,
-        oss.total_score, oss.yield_score, oss.risk_score,
+        oss.total_score, oss.expected_return_score,
         oss.dte_score, oss.liquidity_score, oss.spread_penalty
       FROM option_snapshots os
       JOIN stock_snapshots ss ON os.snapshot_id = ss.id
@@ -369,8 +368,7 @@ export class DatabaseService {
           id: '',
           optionSnapshotId: r.id as string,
           totalScore: r.total_score as number,
-          yieldScore: r.yield_score as number,
-          riskScore: r.risk_score as number,
+          expectedReturnScore: r.expected_return_score as number,
           dteScore: r.dte_score as number,
           liquidityScore: r.liquidity_score as number,
           spreadPenalty: r.spread_penalty as number
@@ -448,6 +446,25 @@ export class DatabaseService {
       console.error(`Error adding symbol ${symbol} to tracking:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Last recorded price on each day in the window, oldest first. Price-only snapshots
+   * from the refresh-price endpoint count too; any price is a price.
+   */
+  async getDailyCloses(symbol: string, days: number): Promise<number[]> {
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const result = await this.db.prepare(`
+      SELECT current_price FROM (
+        SELECT current_price, DATE(created_at) AS day,
+               ROW_NUMBER() OVER (PARTITION BY DATE(created_at) ORDER BY created_at DESC) AS rn
+        FROM stock_snapshots
+        WHERE symbol = ? AND created_at >= ?
+      )
+      WHERE rn = 1
+      ORDER BY day
+    `).bind(symbol.toUpperCase(), cutoff).all();
+    return result.results.map((row: unknown) => (row as { current_price: number }).current_price);
   }
 
   /**

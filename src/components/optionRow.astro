@@ -7,19 +7,19 @@ import '../styles/optionRow.css';
 interface Props {
   option: OptionData;
   currentPrice: number;
+  realizedVol?: number;
   showExpiry?: boolean;
 }
 
-const { option, currentPrice, showExpiry = false } = Astro.props;
-const score = OptionScorer.calculateScore(option, currentPrice);
+const { option, currentPrice, realizedVol, showExpiry = false } = Astro.props;
+const score = OptionScorer.calculateScore(option, currentPrice, realizedVol);
 const expiryDate = formatContractName(option.contractName);
 ---
 <tr class={`${getPremiumClass(option)} ${OptionScorer.getScoreClass(score.total)}`}>
   <td class="score-cell">
     <div class="score-value">{score.total.toFixed(0)}</div>
     <div class="score-breakdown">
-      <span class="premium">Y: {score.yieldScore.toFixed(1)}</span>
-      <span class="theta">Δ: {score.riskScore.toFixed(1)}</span>
+      <span class="premium">E: {score.expectedReturnScore.toFixed(1)}</span>
       <span class="dte">T: {score.dteScore.toFixed(1)}</span>
       <span class="strike">L: {score.liquidityScore.toFixed(1)}</span>
     </div>

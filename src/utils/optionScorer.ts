@@ -1,19 +1,26 @@
 import type { OptionScore } from '../types/option';
 import { DEFAULT_MARGIN_RATE, ReturnCalculator } from './returnCalculator';
-import { putDelta } from './blackScholes';
+import { putExpectedAssignmentLoss } from './blackScholes';
 
 // Weights sum to 100. The spread penalty is subtracted separately.
 const SCORE_WEIGHT = {
-  YIELD: 45,      // Annualized return on collateral from extrinsic premium
-  RISK: 30,       // Assignment risk, via Black-Scholes put delta
-  DTE: 15,        // Days till expiration
-  LIQUIDITY: 10,  // Volume and open interest
+  EXPECTED_RETURN: 60,  // Premium kept minus expected assignment loss, annualized on collateral
+  DTE: 20,              // Days till expiration
+  LIQUIDITY: 10,        // Volume and open interest
 } as const;
 
-/** Annualized return (%) on the default margin basis that earns the full yield score */
-const YIELD_CAP_PCT = 200;
-/** |delta| at or above which a put earns no risk score (at the money and beyond) */
-const RISK_DELTA_CAP = 0.5;
+/**
+ * Annualized expected return (%) on the margin basis that earns the full score.
+ * 100% on 20% margin is 20% on cash collateral; a 35-day 20-delta put with a typical
+ * IV-over-realized gap of ~10 vol points lands around 40% and scores "good".
+ */
+const EXPECTED_RETURN_CAP_PCT = 100;
+/**
+ * Without realized volatility the expected loss is priced at this fraction of the option's IV.
+ * Options tend to imply more volatility than the stock realizes, so this is a stand-in for
+ * the gap until enough daily closes exist; it still ranks higher IV higher.
+ */
+const IV_HAIRCUT_WITHOUT_REALIZED_VOL = 0.8;
 /** DTE earning the full score; the score falls linearly to zero at 0 and at DTE_ZERO_UPPER */
 const DTE_PEAK = 38;
 const DTE_ZERO_UPPER = 90;
@@ -26,29 +33,27 @@ export type ScoreClass = 'score-excellent' | 'score-good' | 'score-moderate' | '
 
 export class OptionScorer {
   /**
-   * Annualized return on collateral, counting only extrinsic premium: an in-the-money
-   * bid is mostly intrinsic value the seller hands back on assignment.
-   * Log-scaled so the first few percent matter most.
+   * Expected return on collateral: extrinsic premium kept (an in-the-money bid is mostly
+   * intrinsic value the seller hands back on assignment) minus the expected assignment loss,
+   * priced at the stock's realized volatility rather than the option's own IV. At the option's
+   * IV premium and expected loss cancel for any fairly priced put, so IV alone cannot score.
+   * Annualized on the margin basis the UI uses, log-scaled so the first points of edge matter most.
    */
-  private static calculateYieldScore(extrinsicPremium: number, strike: number, dte: number): number {
+  private static calculateExpectedReturnScore(
+    extrinsicPremium: number,
+    strike: number,
+    dte: number,
+    expectedLoss: number | undefined
+  ): number {
+    if (expectedLoss === undefined) return 0;
     const annualizedPct = ReturnCalculator.calculateAnnualizedReturn({
-      premium: extrinsicPremium,
+      premium: extrinsicPremium - expectedLoss,
       strike,
       daysToExpiry: dte,
       marginRate: DEFAULT_MARGIN_RATE,
     });
-    const scaled = Math.log1p(Math.min(annualizedPct, YIELD_CAP_PCT)) / Math.log1p(YIELD_CAP_PCT);
-    return SCORE_WEIGHT.YIELD * scaled;
-  }
-
-  /**
-   * Assignment risk from put delta: full score as |delta| approaches 0,
-   * nothing at the money or in the money.
-   */
-  private static calculateRiskScore(delta: number | undefined): number {
-    if (delta === undefined) return 0;
-    const assignmentRisk = Math.min(Math.abs(delta), RISK_DELTA_CAP) / RISK_DELTA_CAP;
-    return SCORE_WEIGHT.RISK * (1 - assignmentRisk);
+    const scaled = Math.log1p(Math.min(annualizedPct, EXPECTED_RETURN_CAP_PCT)) / Math.log1p(EXPECTED_RETURN_CAP_PCT);
+    return SCORE_WEIGHT.EXPECTED_RETURN * scaled;
   }
 
   /** Single triangle: zero at expiry, full at DTE_PEAK, zero again at DTE_ZERO_UPPER */
@@ -75,6 +80,10 @@ export class OptionScorer {
     return Math.min(15, (spreadPct - 0.08) * 200);
   }
 
+  /**
+   * @param realizedVol Annualized realized volatility of the underlying, used to price the
+   *   expected assignment loss. Omitted, the option's IV is haircut instead.
+   */
   static calculateScore(option: {
     bid: number;
     ask: number;
@@ -83,27 +92,26 @@ export class OptionScorer {
     impliedVolatility: number;
     volume?: number;
     openInterest?: number;
-  }, currentPrice: number): OptionScore {
+  }, currentPrice: number, realizedVol?: number): OptionScore {
     const dte = Math.ceil(
       (new Date(option.expirationDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
     );
 
     const intrinsic = Math.max(0, option.strike - currentPrice);
     const extrinsicPremium = Math.max(0, option.bid - intrinsic);
-    const delta = putDelta(currentPrice, option.strike, dte, option.impliedVolatility);
+    const pricingVol = realizedVol ?? option.impliedVolatility * IV_HAIRCUT_WITHOUT_REALIZED_VOL;
+    const expectedLoss = putExpectedAssignmentLoss(currentPrice, option.strike, dte, pricingVol);
 
-    const yieldScore = this.calculateYieldScore(extrinsicPremium, option.strike, dte);
-    const riskScore = this.calculateRiskScore(delta);
+    const expectedReturnScore = this.calculateExpectedReturnScore(extrinsicPremium, option.strike, dte, expectedLoss);
     const dteScore = this.calculateDteScore(dte);
     const liquidityScore = this.calculateLiquidityScore(option.volume, option.openInterest);
     const spreadPenalty = this.calculateSpreadPenalty(option.bid, option.ask);
 
-    const rawTotal = yieldScore + riskScore + dteScore + liquidityScore - spreadPenalty;
+    const rawTotal = expectedReturnScore + dteScore + liquidityScore - spreadPenalty;
 
     return {
       total: round2(Math.max(0, Math.min(100, rawTotal))),
-      yieldScore: round2(yieldScore),
-      riskScore: round2(riskScore),
+      expectedReturnScore: round2(expectedReturnScore),
       dteScore: round2(dteScore),
       liquidityScore: round2(liquidityScore),
       spreadPenalty: round2(spreadPenalty),

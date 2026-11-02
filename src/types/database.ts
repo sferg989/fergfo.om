@@ -31,8 +31,7 @@ export interface OptionScoreSnapshot {
   id: string;
   optionSnapshotId: string; // foreign key to OptionSnapshot
   totalScore: number;
-  yieldScore: number;
-  riskScore: number;
+  expectedReturnScore: number;
   dteScore: number;
   liquidityScore: number;
   spreadPenalty: number;

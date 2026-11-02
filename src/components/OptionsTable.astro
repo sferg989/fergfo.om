@@ -15,7 +15,7 @@ const { symbol } = Astro.props;
 // Get D1 database from runtime if available
 const db = (Astro.locals.runtime?.env?.DB as D1Database) || null;
 const optionsService = OptionsService.getInstance(db);
-const { options, currentPrice, fetchedAt, error } = await optionsService.fetchOptionsData(symbol);
+const { options, currentPrice, realizedVol, fetchedAt, error } = await optionsService.fetchOptionsData(symbol);
 
 const sortedGroups = groupOptionsByExpiry(options);
 
@@ -43,7 +43,7 @@ const sortedGroups = groupOptionsByExpiry(options);
         </div>
         <div class="flex items-center gap-2">
           <span class="price-range" id="price-range">
-            Puts 5–50Δ
+            Puts 5–50Δ{realizedVol !== undefined && ` · RV ${(realizedVol * 100).toFixed(0)}%`}
           </span>
           {fetchedAt && (
             <span class="last-updated" id="last-updated">
@@ -53,14 +53,14 @@ const sortedGroups = groupOptionsByExpiry(options);
         </div>
       </div>
       {options.length > 0 && (
-        <HighestScoreOption options={options} currentPrice={currentPrice} symbol={symbol} />
+        <HighestScoreOption options={options} currentPrice={currentPrice} realizedVol={realizedVol} symbol={symbol} />
       )}
 {/* <Debug value={options} /> */}
-      <HighScoreOptions options={options} currentPrice={currentPrice} />
+      <HighScoreOptions options={options} currentPrice={currentPrice} realizedVol={realizedVol} />
 
       <div class="expiry-groups">
         {sortedGroups.map((group) => (
-          <OptionsGroup group={group} currentPrice={currentPrice} />
+          <OptionsGroup group={group} currentPrice={currentPrice} realizedVol={realizedVol} />
         ))}
       </div>
     </>

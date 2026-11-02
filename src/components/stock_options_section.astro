@@ -45,7 +45,7 @@ if (db) {
       const scoredOptions: ScoredOption[] = rawData.options
         .map(option => ({
           ...option,
-          score: OptionScorer.calculateScore(option, rawData.currentPrice)
+          score: OptionScorer.calculateScore(option, rawData.currentPrice, rawData.realizedVol)
         }))
         .sort((a, b) => b.score.total - a.score.total);
 

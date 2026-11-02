@@ -8,9 +8,10 @@ import '../styles/optionIndicators.css';
 interface Props {
   group: GroupedOption;
   currentPrice: number;
+  realizedVol?: number;
 }
 
-const { group, currentPrice } = Astro.props;
+const { group, currentPrice, realizedVol } = Astro.props;
 ---
 
 <div class="expiry-group">
@@ -36,7 +37,7 @@ const { group, currentPrice } = Astro.props;
       </thead>
       <tbody>
         {group.options.map((option) => (
-          <OptionRow option={option} currentPrice={currentPrice} />
+          <OptionRow option={option} currentPrice={currentPrice} realizedVol={realizedVol} />
         ))}
       </tbody>
     </table>
