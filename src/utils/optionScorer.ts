@@ -10,11 +10,13 @@ const SCORE_WEIGHT = {
 } as const;
 
 /**
- * Annualized expected return (%) on the margin basis that earns the full score.
- * 100% on 20% margin is 20% on cash collateral; a 35-day 20-delta put with a typical
- * IV-over-realized gap of ~10 vol points lands around 40% and scores "good".
+ * Annualized expected return (%) on the margin basis that earns the full score; the score is
+ * linear up to it. 60% on 20% margin is 12% on cash collateral net of expected assignment loss.
+ * A 35-day 20-delta put with a typical IV-over-realized gap of ~10 vol points lands around 40%
+ * and scores "good"; a weekly's annualized edge saturates here and the DTE factor sorts it below
+ * the 38-day sweet spot.
  */
-const EXPECTED_RETURN_CAP_PCT = 100;
+const EXPECTED_RETURN_CAP_PCT = 60;
 /**
  * Without realized volatility the expected loss is priced at this fraction of the option's IV.
  * Options tend to imply more volatility than the stock realizes, so this is a stand-in for
@@ -37,7 +39,7 @@ export class OptionScorer {
    * intrinsic value the seller hands back on assignment) minus the expected assignment loss,
    * priced at the stock's realized volatility rather than the option's own IV. At the option's
    * IV premium and expected loss cancel for any fairly priced put, so IV alone cannot score.
-   * Annualized on the margin basis the UI uses, log-scaled so the first points of edge matter most.
+   * Annualized on the margin basis the UI uses and scaled linearly, so twice the edge scores twice.
    */
   private static calculateExpectedReturnScore(
     extrinsicPremium: number,
@@ -52,8 +54,7 @@ export class OptionScorer {
       daysToExpiry: dte,
       marginRate: DEFAULT_MARGIN_RATE,
     });
-    const scaled = Math.log1p(Math.min(annualizedPct, EXPECTED_RETURN_CAP_PCT)) / Math.log1p(EXPECTED_RETURN_CAP_PCT);
-    return SCORE_WEIGHT.EXPECTED_RETURN * scaled;
+    return SCORE_WEIGHT.EXPECTED_RETURN * Math.min(annualizedPct, EXPECTED_RETURN_CAP_PCT) / EXPECTED_RETURN_CAP_PCT;
   }
 
   /** Single triangle: zero at expiry, full at DTE_PEAK, zero again at DTE_ZERO_UPPER */

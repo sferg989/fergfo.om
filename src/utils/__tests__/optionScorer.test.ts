@@ -75,10 +75,18 @@ describe('OptionScorer', () => {
     expect(itm.expectedReturnScore).toBeLessThan(otm.expectedReturnScore);
   });
 
-  it('falls back to a haircut of the option IV when realized vol is unknown', () => {
+  it('falls back to a haircut of the option IV when realized vol is unknown, scoring the put more cautiously', () => {
     const withoutRealized = OptionScorer.calculateScore(put(), SPOT);
+    const withRealized = OptionScorer.calculateScore(put(), SPOT, REALIZED_VOL);
     expect(withoutRealized.expectedReturnScore).toBeGreaterThan(0);
-    expect(withoutRealized.total).toBeGreaterThanOrEqual(ScoreThresholds.STANDARD);
+    expect(withoutRealized.expectedReturnScore).toBeLessThan(withRealized.expectedReturnScore);
+    expect(withoutRealized.total).toBeGreaterThanOrEqual(ScoreThresholds.MINIMUM);
+  });
+
+  it('expected return scales linearly with edge so twice the net premium scores about twice', () => {
+    const thin = OptionScorer.calculateScore(put({ bid: 0.8, ask: 0.9 }), SPOT, REALIZED_VOL);
+    const rich = OptionScorer.calculateScore(put({ bid: 1.8, ask: 1.9 }), SPOT, REALIZED_VOL);
+    expect(rich.expectedReturnScore - thin.expectedReturnScore).toBeGreaterThan(30);
   });
 
   it('a textbook 35-day, ~20-delta put with a 10-point vol premium clears the standard threshold', () => {
