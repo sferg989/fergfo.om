@@ -3,7 +3,7 @@ import { DEFAULT_MARGIN_RATE, ReturnCalculator } from './returnCalculator';
 import { putExpectedAssignmentLoss } from './blackScholes';
 
 /** Stored on option outcomes; bump when the scoring logic changes */
-export const SCORER_VERSION = '2026-11-03-expected-return';
+export const SCORER_VERSION = '2026-11-04-no-edge-without-realized-vol';
 
 // Weights sum to 100. The spread penalty is subtracted separately.
 const SCORE_WEIGHT = {
@@ -20,12 +20,6 @@ const SCORE_WEIGHT = {
  * the 38-day sweet spot.
  */
 const EXPECTED_RETURN_CAP_PCT = 60;
-/**
- * Without realized volatility the expected loss is priced at this fraction of the option's IV.
- * Options tend to imply more volatility than the stock realizes, so this is a stand-in for
- * the gap until enough daily closes exist; it still ranks higher IV higher.
- */
-const IV_HAIRCUT_WITHOUT_REALIZED_VOL = 0.8;
 /** DTE earning the full score; the score falls linearly to zero at 0 and at DTE_ZERO_UPPER */
 const DTE_PEAK = 38;
 const DTE_ZERO_UPPER = 90;
@@ -86,7 +80,8 @@ export class OptionScorer {
 
   /**
    * @param realizedVol Annualized realized volatility of the underlying, used to price the
-   *   expected assignment loss. Omitted, the option's IV is haircut instead.
+   *   expected assignment loss. Omitted, no edge can be measured and the expected-return
+   *   factor scores zero: a haircut of the option's own IV only rewarded the highest-IV puts.
    */
   static calculateScore(option: {
     bid: number;
@@ -103,8 +98,9 @@ export class OptionScorer {
 
     const intrinsic = Math.max(0, option.strike - currentPrice);
     const extrinsicPremium = Math.max(0, option.bid - intrinsic);
-    const pricingVol = realizedVol ?? option.impliedVolatility * IV_HAIRCUT_WITHOUT_REALIZED_VOL;
-    const expectedLoss = putExpectedAssignmentLoss(currentPrice, option.strike, dte, pricingVol);
+    const expectedLoss = realizedVol === undefined
+      ? undefined
+      : putExpectedAssignmentLoss(currentPrice, option.strike, dte, realizedVol);
 
     const expectedReturnScore = this.calculateExpectedReturnScore(extrinsicPremium, option.strike, dte, expectedLoss);
     const dteScore = this.calculateDteScore(dte);

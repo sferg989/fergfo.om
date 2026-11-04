@@ -75,12 +75,12 @@ describe('OptionScorer', () => {
     expect(itm.expectedReturnScore).toBeLessThan(otm.expectedReturnScore);
   });
 
-  it('falls back to a haircut of the option IV when realized vol is unknown, scoring the put more cautiously', () => {
+  it('earns no expected-return credit when realized vol is unknown, so IV alone cannot rank a put', () => {
     const withoutRealized = OptionScorer.calculateScore(put(), SPOT);
-    const withRealized = OptionScorer.calculateScore(put(), SPOT, REALIZED_VOL);
-    expect(withoutRealized.expectedReturnScore).toBeGreaterThan(0);
-    expect(withoutRealized.expectedReturnScore).toBeLessThan(withRealized.expectedReturnScore);
-    expect(withoutRealized.total).toBeGreaterThanOrEqual(ScoreThresholds.MINIMUM);
+    const highIvWithoutRealized = OptionScorer.calculateScore(put({ strike: 81, bid: 4, ask: 4.2, impliedVolatility: 1.0 }), SPOT);
+    expect(withoutRealized.expectedReturnScore).toBe(0);
+    expect(highIvWithoutRealized.expectedReturnScore).toBe(0);
+    expect(withoutRealized.total).toBeCloseTo(withoutRealized.dteScore + withoutRealized.liquidityScore - withoutRealized.spreadPenalty, 2);
   });
 
   it('expected return scales linearly with edge so twice the net premium scores about twice', () => {
