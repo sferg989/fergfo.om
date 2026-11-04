@@ -93,6 +93,14 @@ export interface ExpiredContract {
   firstSeenAt: string;
   firstSeenBid: number;
   firstSeenScore: number | null;
+  /** Scoring inputs at that snapshot */
+  ask: number;
+  impliedVolatility: number;
+  spotPrice: number;
+  dteAtScore: number;
+  volume: number;
+  openInterest: number;
+  realizedVol: number | null;
 }
 
 export interface OptionOutcome extends ExpiredContract {

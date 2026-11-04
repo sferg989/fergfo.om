@@ -2,6 +2,7 @@ import { OptionsService } from './optionsService';
 import { DatabaseService } from './database_service';
 import { isMarketHours as checkMarketHours } from '../utils/marketHoursUtils';
 import { settleShortPut } from '../utils/optionOutcome';
+import { realizedVolatility } from '../utils/realizedVolatility';
 import type { ExpiredContract, OptionOutcome } from '../types/database';
 
 interface SymbolTrackingRecord {
@@ -51,6 +52,10 @@ const PROVIDER_ERROR = /Failed to get crumb|Too Many Requests|status 429/;
  * snapshot must survive 39 days. History endpoints only look back 30.
  */
 const SNAPSHOT_RETENTION_DAYS = 40;
+/** Daily closes feed realized volatility and are tiny, so they outlive the snapshots */
+const DAILY_CLOSE_RETENTION_DAYS = 90;
+/** Same window the scorer prices against (optionsService REALIZED_VOL_WINDOW_DAYS) */
+const REALIZED_VOL_WINDOW_DAYS = 30;
 /** Stock snapshots deleted per prune call (~130 option + score rows cascade per snapshot).
  * 150+ intermittently hit D1's SQLITE_NOMEM; 100 ran clean. */
 const PRUNE_BATCH_SIZE = 100;
@@ -82,7 +87,12 @@ export class BackgroundRefreshService {
    */
   async pruneOldSnapshots(): Promise<number> {
     const cutoff = new Date(Date.now() - SNAPSHOT_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
-    const deleted = await DatabaseService.getInstance(this.db).deleteSnapshotsBefore(cutoff, PRUNE_BATCH_SIZE);
+    const dbService = DatabaseService.getInstance(this.db);
+    const deleted = await dbService.deleteSnapshotsBefore(cutoff, PRUNE_BATCH_SIZE)
+      + await dbService.deleteDailyClosesBefore(
+        new Date(Date.now() - DAILY_CLOSE_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+        PRUNE_BATCH_SIZE
+      );
     if (deleted > 0) {
       console.log(`[PRUNE] Deleted ${deleted} rows (snapshots plus cascaded options/scores) older than ${cutoff}`);
     }
@@ -102,16 +112,21 @@ export class BackgroundRefreshService {
     const expired = await DatabaseService.getInstance(this.db).getExpiredContractsWithoutOutcome(cutoff, OUTCOME_BATCH_SIZE);
     if (expired.length === 0) return 0;
 
+    const dbService = DatabaseService.getInstance(this.db);
     const closes = new Map<string, number | undefined>();
     const outcomes: OptionOutcome[] = [];
     for (const contract of expired) {
       const settlementPrice = await this.settlementPriceFor(contract, closes);
       if (settlementPrice === undefined) continue;
       const settled = settleShortPut({ strike: contract.strike, premium: contract.firstSeenBid, settlementPrice });
-      outcomes.push({ ...contract, settlementPrice, ...settled });
+      // Reconstruct the realized vol the scorer saw at the snapshot from the retained daily closes
+      const realizedVol = realizedVolatility(
+        await dbService.getDailyCloses(contract.symbol, REALIZED_VOL_WINDOW_DAYS, contract.firstSeenAt)
+      ) ?? null;
+      outcomes.push({ ...contract, settlementPrice, ...settled, realizedVol });
     }
 
-    await DatabaseService.getInstance(this.db).saveOptionOutcomes(outcomes);
+    await dbService.saveOptionOutcomes(outcomes);
     console.log(`[OUTCOMES] Recorded ${outcomes.length} of ${expired.length} expired contracts`);
     return outcomes.length;
   }

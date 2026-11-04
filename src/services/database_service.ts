@@ -8,6 +8,9 @@ import type {
 import type { OptionData, OptionScore } from '../types/option';
 import type { ExpiredContract, OptionOutcome } from '../types/database';
 
+import { SCORER_VERSION } from '../utils/optionScorer';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 /** Statements per D1 batch call */
 const BATCH_SIZE = 100;
 
@@ -46,8 +49,26 @@ export class DatabaseService {
       params.source || 'finnhub',
       now
     ).run();
+    await this.upsertDailyClose(params.symbol, now, params.currentPrice);
 
     return id;
+  }
+
+  /** Latest fetched price of the UTC day wins (same day definition as DATE(created_at)) */
+  private async upsertDailyClose(symbol: string, isoTime: string, close: number): Promise<void> {
+    await this.db.prepare(`
+      INSERT INTO daily_closes (symbol, day, close) VALUES (?, ?, ?)
+      ON CONFLICT(symbol, day) DO UPDATE SET close = excluded.close
+    `).bind(symbol.toUpperCase(), isoTime.slice(0, 10), close).run();
+  }
+
+  /** Delete daily closes older than `cutoffDay` (YYYY-MM-DD), at most `limit` per call */
+  async deleteDailyClosesBefore(cutoffDay: string, limit: number): Promise<number> {
+    const result = await this.db.prepare(`
+      DELETE FROM daily_closes
+      WHERE rowid IN (SELECT rowid FROM daily_closes WHERE day < ? ORDER BY day LIMIT ?)
+    `).bind(cutoffDay, limit).run();
+    return result.meta.changes ?? 0;
   }
 
   /**
@@ -192,9 +213,11 @@ export class DatabaseService {
     // created_at and expiration_date are both ISO-8601 strings, which julianday() parses.
     // Pick the snapshot at the largest DTE <= 38; contracts never seen that close fall back to the oldest.
     const result = await this.db.prepare(`
-      SELECT contract_name, symbol, strike, expiration_date, bid, total_score, first_seen_at
+      SELECT contract_name, symbol, strike, expiration_date, bid, ask, implied_volatility, volume, open_interest,
+             spot_price, total_score, first_seen_at
       FROM (
-        SELECT os.contract_name, ss.symbol, os.strike, os.expiration_date, os.bid, oss.total_score,
+        SELECT os.contract_name, ss.symbol, os.strike, os.expiration_date, os.bid, os.ask,
+               os.implied_volatility, os.volume, os.open_interest, ss.current_price AS spot_price, oss.total_score,
                ss.created_at AS first_seen_at,
                ROW_NUMBER() OVER (
                  PARTITION BY os.contract_name
@@ -223,7 +246,15 @@ export class DatabaseService {
         expirationDate: r.expiration_date as string,
         firstSeenAt: r.first_seen_at as string,
         firstSeenBid: r.bid as number,
-        firstSeenScore: (r.total_score as number | null) ?? null
+        firstSeenScore: (r.total_score as number | null) ?? null,
+        ask: r.ask as number,
+        impliedVolatility: r.implied_volatility as number,
+        spotPrice: r.spot_price as number,
+        // Same convention as OptionScorer.calculateScore, evaluated at the snapshot time
+        dteAtScore: Math.ceil((new Date(r.expiration_date as string).getTime() - new Date(r.first_seen_at as string).getTime()) / DAY_MS),
+        volume: r.volume as number,
+        openInterest: r.open_interest as number,
+        realizedVol: null // filled by the outcome sweep from daily_closes
       };
     });
   }
@@ -234,12 +265,14 @@ export class DatabaseService {
     const insert = this.db.prepare(`
       INSERT OR IGNORE INTO option_outcomes (
         contract_name, symbol, strike, expiration_date, settlement_price, expired_otm,
-        first_seen_at, first_seen_bid, first_seen_score, realized_return, realized_return_pct, recorded_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        first_seen_at, first_seen_bid, first_seen_score, realized_return, realized_return_pct, recorded_at,
+        implied_volatility, ask, spot_price, dte_at_score, volume, open_interest, realized_vol, scorer_version
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     await this.runInBatches(outcomes.map(o => insert.bind(
       o.contractName, o.symbol, o.strike, o.expirationDate, o.settlementPrice, o.expiredOtm ? 1 : 0,
-      o.firstSeenAt, o.firstSeenBid, o.firstSeenScore, o.realizedReturn, o.realizedReturnPct, now
+      o.firstSeenAt, o.firstSeenBid, o.firstSeenScore, o.realizedReturn, o.realizedReturnPct, now,
+      o.impliedVolatility, o.ask, o.spotPrice, o.dteAtScore, o.volume, o.openInterest, o.realizedVol, SCORER_VERSION
     )));
   }
 
@@ -449,22 +482,16 @@ export class DatabaseService {
   }
 
   /**
-   * Last recorded price on each day in the window, oldest first. Price-only snapshots
-   * from the refresh-price endpoint count too; any price is a price.
+   * Last recorded price on each day in the `days` before `before` (exclusive of that day),
+   * oldest first, from daily_closes (kept 90 days). Defaults to the window ending now.
    */
-  async getDailyCloses(symbol: string, days: number): Promise<number[]> {
-    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  async getDailyCloses(symbol: string, days: number, before: string = new Date().toISOString()): Promise<number[]> {
+    const endMs = new Date(before).getTime();
+    const cutoffDay = new Date(endMs - days * DAY_MS).toISOString().slice(0, 10);
     const result = await this.db.prepare(`
-      SELECT current_price FROM (
-        SELECT current_price, DATE(created_at) AS day,
-               ROW_NUMBER() OVER (PARTITION BY DATE(created_at) ORDER BY created_at DESC) AS rn
-        FROM stock_snapshots
-        WHERE symbol = ? AND created_at >= ?
-      )
-      WHERE rn = 1
-      ORDER BY day
-    `).bind(symbol.toUpperCase(), cutoff).all();
-    return result.results.map((row: unknown) => (row as { current_price: number }).current_price);
+      SELECT close FROM daily_closes WHERE symbol = ? AND day >= ? AND day < ? ORDER BY day
+    `).bind(symbol.toUpperCase(), cutoffDay, before.slice(0, 10)).all();
+    return result.results.map((row: unknown) => (row as { close: number }).close);
   }
 
   /**

@@ -2,6 +2,9 @@ import type { OptionScore } from '../types/option';
 import { DEFAULT_MARGIN_RATE, ReturnCalculator } from './returnCalculator';
 import { putExpectedAssignmentLoss } from './blackScholes';
 
+/** Stored on option outcomes; bump when the scoring logic changes */
+export const SCORER_VERSION = '2026-11-03-expected-return';
+
 // Weights sum to 100. The spread penalty is subtracted separately.
 const SCORE_WEIGHT = {
   EXPECTED_RETURN: 60,  // Premium kept minus expected assignment loss, annualized on collateral
