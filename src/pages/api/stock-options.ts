@@ -18,13 +18,14 @@ export const GET: APIRoute = async ({ request, locals }) => {
     const db = (locals.runtime?.env?.DB as D1Database) || null;
     const optionsService = OptionsService.getInstance(db);
     
-    const { options, currentPrice, realizedVol, fetchedAt, error } = await optionsService.fetchOptionsData(symbol);
+    const { options, currentPrice, realizedVol, earningsDates, fetchedAt, error } = await optionsService.fetchOptionsData(symbol);
     
     const responseData: StockOptionsData = {
       symbol,
       options,
       currentPrice,
       realizedVol,
+      earningsDates,
       fetchedAt,
       error
     };

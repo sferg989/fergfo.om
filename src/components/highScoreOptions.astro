@@ -9,13 +9,14 @@ interface Props {
   options: OptionData[];
   currentPrice: number;
   realizedVol?: number;
+  earningsDates?: string[];
   minScore?: number;
 }
 
-const { options, currentPrice, realizedVol, minScore = ScoreThresholds.STANDARD } = Astro.props;
+const { options, currentPrice, realizedVol, earningsDates, minScore = ScoreThresholds.STANDARD } = Astro.props;
 
 const highScoreOptions = options.filter(option => {
-  const score = OptionScorer.calculateScore(option, currentPrice, realizedVol);
+  const score = OptionScorer.calculateScore(option, currentPrice, realizedVol, earningsDates);
   return score.total >= minScore;
 });
 ---
@@ -43,6 +44,7 @@ const highScoreOptions = options.filter(option => {
             option={option}
             currentPrice={currentPrice}
             realizedVol={realizedVol}
+            earningsDates={earningsDates}
             showExpiry={true}
           />
         ))}

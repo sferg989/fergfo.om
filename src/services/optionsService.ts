@@ -136,7 +136,7 @@ export class OptionsService {
     }
   }
 
-  async fetchOptionsData(symbol: string): Promise<{ options: OptionData[]; currentPrice: number; realizedVol?: number; fetchedAt?: string; error?: string }> {
+  async fetchOptionsData(symbol: string): Promise<{ options: OptionData[]; currentPrice: number; realizedVol?: number; earningsDates?: string[]; fetchedAt?: string; error?: string }> {
     if (!isValidSymbol(symbol)) {
       return { options: [], currentPrice: 0, error: `Invalid symbol: ${symbol}` };
     }
@@ -157,6 +157,7 @@ export class OptionsService {
             options: cachedData.options,
             currentPrice: cachedData.currentPrice,
             realizedVol: await this.getRealizedVol(symbol),
+            earningsDates: await this.getStoredEarningsDates(symbol),
             fetchedAt: cachedData.fetchedAt
           };
         }
@@ -193,6 +194,38 @@ export class OptionsService {
     } catch (error) {
       console.warn(`Realized vol unavailable for ${symbol}:`, error instanceof Error ? error.message : error);
       return undefined;
+    }
+  }
+
+  /** Earnings dates the scorer should know about, from the tracking table */
+  private async getStoredEarningsDates(symbol: string): Promise<string[]> {
+    if (!this.dbService) return [];
+    try {
+      const next = await this.dbService.getNextEarningsAt(symbol);
+      return next ? [next] : [];
+    } catch (error) {
+      console.warn(`Earnings date unavailable for ${symbol}:`, error instanceof Error ? error.message : error);
+      return [];
+    }
+  }
+
+  /**
+   * Refresh the stored next earnings date from Yahoo when it is missing or has passed,
+   * so the worker spends one extra call per symbol per quarter rather than per refresh.
+   */
+  private async refreshEarningsDates(symbol: string): Promise<string[]> {
+    const stored = await this.getStoredEarningsDates(symbol);
+    if (stored.length > 0 && new Date(stored[0]).getTime() > Date.now()) return stored;
+    try {
+      const summary = await yahooFinance.quoteSummary(symbol, { modules: ['calendarEvents'] });
+      await this.persistYahooSession();
+      const next = summary.calendarEvents?.earnings?.earningsDate?.[0];
+      const nextIso = next instanceof Date ? next.toISOString() : null;
+      if (this.dbService) await this.dbService.setNextEarningsAt(symbol, nextIso);
+      return nextIso ? [nextIso] : [];
+    } catch (error) {
+      console.warn(`Earnings date refresh failed for ${symbol}:`, error instanceof Error ? error.message : error);
+      return stored;
     }
   }
 
@@ -292,7 +325,7 @@ export class OptionsService {
   /**
    * Fetch fresh data from external API (for background refresh only)
    */
-  async fetchFreshOptionsData(symbol: string): Promise<{ options: OptionData[]; currentPrice: number; realizedVol?: number; fetchedAt?: string; error?: string }> {
+  async fetchFreshOptionsData(symbol: string): Promise<{ options: OptionData[]; currentPrice: number; realizedVol?: number; earningsDates?: string[]; fetchedAt?: string; error?: string }> {
     try {
       console.log(`Fetching fresh data for ${symbol} from external API`);
       await this.restoreYahooSession();
@@ -333,8 +366,9 @@ export class OptionsService {
       if (this.dbService && allOptions.length > 0) {
         try {
           const realizedVol = await this.getRealizedVol(symbol);
+          const earningsDates = await this.refreshEarningsDates(symbol);
           const scores = allOptions.map(option =>
-            OptionScorer.calculateScore(option, currentPrice, realizedVol)
+            OptionScorer.calculateScore(option, currentPrice, realizedVol, earningsDates)
           );
           
           await this.dbService.saveCompleteSnapshot(

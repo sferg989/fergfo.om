@@ -40,6 +40,8 @@ export interface StockOptionsData {
   currentPrice: number;
   /** Annualized realized volatility of the underlying, when enough daily closes exist */
   realizedVol?: number;
+  /** Known earnings report times used by the scorer */
+  earningsDates?: string[];
   fetchedAt?: string;
   error?: string;
 } 

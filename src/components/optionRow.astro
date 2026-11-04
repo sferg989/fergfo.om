@@ -8,11 +8,12 @@ interface Props {
   option: OptionData;
   currentPrice: number;
   realizedVol?: number;
+  earningsDates?: string[];
   showExpiry?: boolean;
 }
 
-const { option, currentPrice, realizedVol, showExpiry = false } = Astro.props;
-const score = OptionScorer.calculateScore(option, currentPrice, realizedVol);
+const { option, currentPrice, realizedVol, earningsDates, showExpiry = false } = Astro.props;
+const score = OptionScorer.calculateScore(option, currentPrice, realizedVol, earningsDates);
 const expiryDate = formatContractName(option.contractName);
 ---
 <tr class={`${getPremiumClass(option)} ${OptionScorer.getScoreClass(score.total)}`}>

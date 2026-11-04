@@ -15,7 +15,7 @@ const { symbol } = Astro.props;
 // Get D1 database from runtime if available
 const db = (Astro.locals.runtime?.env?.DB as D1Database) || null;
 const optionsService = OptionsService.getInstance(db);
-const { options, currentPrice, realizedVol, fetchedAt, error } = await optionsService.fetchOptionsData(symbol);
+const { options, currentPrice, realizedVol, earningsDates, fetchedAt, error } = await optionsService.fetchOptionsData(symbol);
 
 const sortedGroups = groupOptionsByExpiry(options);
 
@@ -53,14 +53,14 @@ const sortedGroups = groupOptionsByExpiry(options);
         </div>
       </div>
       {options.length > 0 && (
-        <HighestScoreOption options={options} currentPrice={currentPrice} realizedVol={realizedVol} symbol={symbol} />
+        <HighestScoreOption options={options} currentPrice={currentPrice} realizedVol={realizedVol} earningsDates={earningsDates} symbol={symbol} />
       )}
 {/* <Debug value={options} /> */}
-      <HighScoreOptions options={options} currentPrice={currentPrice} realizedVol={realizedVol} />
+      <HighScoreOptions options={options} currentPrice={currentPrice} realizedVol={realizedVol} earningsDates={earningsDates} />
 
       <div class="expiry-groups">
         {sortedGroups.map((group) => (
-          <OptionsGroup group={group} currentPrice={currentPrice} realizedVol={realizedVol} />
+          <OptionsGroup group={group} currentPrice={currentPrice} realizedVol={realizedVol} earningsDates={earningsDates} />
         ))}
       </div>
     </>

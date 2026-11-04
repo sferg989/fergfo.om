@@ -446,6 +446,17 @@ export class DatabaseService {
     return result.results as unknown as TopPerformingOption[];
   }
 
+  async getNextEarningsAt(symbol: string): Promise<string | null> {
+    const row = await this.db.prepare('SELECT next_earnings_at FROM symbol_tracking WHERE symbol = ?')
+      .bind(symbol.toUpperCase()).first<{ next_earnings_at: string | null }>();
+    return row?.next_earnings_at ?? null;
+  }
+
+  async setNextEarningsAt(symbol: string, nextEarningsAt: string | null): Promise<void> {
+    await this.db.prepare('UPDATE symbol_tracking SET next_earnings_at = ? WHERE symbol = ?')
+      .bind(nextEarningsAt, symbol.toUpperCase()).run();
+  }
+
   /**
    * Add a symbol to the tracking table for background refresh
    */

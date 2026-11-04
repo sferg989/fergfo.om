@@ -7,17 +7,18 @@ interface Props {
   options: OptionData[];
   currentPrice: number;
   realizedVol?: number;
+  earningsDates?: string[];
   symbol: string;
 }
 
-const { options, currentPrice, realizedVol, symbol } = Astro.props;
+const { options, currentPrice, realizedVol, earningsDates, symbol } = Astro.props;
 
 // Find the highest scoring option
 let highestScore = 0;
 let highestScoreOption: OptionData | null = null;
 
 options.forEach((option) => {
-  const score = OptionScorer.calculateScore(option, currentPrice, realizedVol);
+  const score = OptionScorer.calculateScore(option, currentPrice, realizedVol, earningsDates);
   if (score.total > highestScore) {
     highestScore = score.total;
     highestScoreOption = option;
