@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { OptionScorer } from '../optionScorer';
+import { OptionScorer, spansEarnings } from '../optionScorer';
 import { ScoreThresholds } from '../../enums/scoreThresholds';
 
 /** ISO expiry such that Math.ceil on the day difference yields exactly `days` */
@@ -81,6 +81,25 @@ describe('OptionScorer', () => {
     expect(withoutRealized.expectedReturnScore).toBe(0);
     expect(highIvWithoutRealized.expectedReturnScore).toBe(0);
     expect(withoutRealized.total).toBeCloseTo(withoutRealized.dteScore + withoutRealized.liquidityScore - withoutRealized.spreadPenalty, 2);
+  });
+
+  it('earns no expected-return credit when an earnings report falls before expiration', () => {
+    const earningsInside = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString();
+    const earningsAfter = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString();
+    const spanning = OptionScorer.calculateScore(put(), SPOT, REALIZED_VOL, [earningsInside]);
+    const clear = OptionScorer.calculateScore(put(), SPOT, REALIZED_VOL, [earningsAfter]);
+    expect(spanning.expectedReturnScore).toBe(0);
+    expect(clear.expectedReturnScore).toBeGreaterThan(0);
+  });
+
+  it('spansEarnings is true only for a report after now and no later than the expiration day', () => {
+    const now = Date.parse('2026-10-06T18:00:00Z');
+    const expiry = '2026-10-23T00:00:00.000Z';
+    expect(spansEarnings(expiry, ['2026-10-21T20:00:00Z'], now)).toBe(true);
+    expect(spansEarnings(expiry, ['2026-10-23T20:00:00Z'], now)).toBe(true);
+    expect(spansEarnings(expiry, ['2026-10-24T20:00:00Z'], now)).toBe(false);
+    expect(spansEarnings(expiry, ['2026-10-01T20:00:00Z'], now)).toBe(false);
+    expect(spansEarnings(expiry, [], now)).toBe(false);
   });
 
   it('expected return scales linearly with edge so twice the net premium scores about twice', () => {

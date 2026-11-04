@@ -3,7 +3,7 @@ import { DEFAULT_MARGIN_RATE, ReturnCalculator } from './returnCalculator';
 import { putExpectedAssignmentLoss } from './blackScholes';
 
 /** Stored on option outcomes; bump when the scoring logic changes */
-export const SCORER_VERSION = '2026-11-04-no-edge-without-realized-vol';
+export const SCORER_VERSION = '2026-11-04-earnings-span';
 
 // Weights sum to 100. The spread penalty is subtracted separately.
 const SCORE_WEIGHT = {
@@ -27,6 +27,15 @@ const DTE_ZERO_UPPER = 90;
 const LIQUIDITY_CAP = 10000;
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
+
+/** True when an earnings report falls after `now` and on or before the option's expiration day */
+export const spansEarnings = (expirationDate: string, earningsDates: string[], now = Date.now()): boolean => {
+  const expiryEnd = new Date(expirationDate).getTime() + 24 * 60 * 60 * 1000;
+  return earningsDates.some(d => {
+    const t = new Date(d).getTime();
+    return t > now && t <= expiryEnd;
+  });
+};
 
 export type ScoreClass = 'score-excellent' | 'score-good' | 'score-moderate' | 'score-weak' | 'score-poor';
 
@@ -82,6 +91,8 @@ export class OptionScorer {
    * @param realizedVol Annualized realized volatility of the underlying, used to price the
    *   expected assignment loss. Omitted, no edge can be measured and the expected-return
    *   factor scores zero: a haircut of the option's own IV only rewarded the highest-IV puts.
+   * @param earningsDates Known earnings report times. A put whose life spans one earns no
+   *   expected-return credit: its IV premium over realized vol is the event, not mispricing.
    */
   static calculateScore(option: {
     bid: number;
@@ -91,14 +102,14 @@ export class OptionScorer {
     impliedVolatility: number;
     volume?: number;
     openInterest?: number;
-  }, currentPrice: number, realizedVol?: number): OptionScore {
+  }, currentPrice: number, realizedVol?: number, earningsDates: string[] = []): OptionScore {
     const dte = Math.ceil(
       (new Date(option.expirationDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
     );
 
     const intrinsic = Math.max(0, option.strike - currentPrice);
     const extrinsicPremium = Math.max(0, option.bid - intrinsic);
-    const expectedLoss = realizedVol === undefined
+    const expectedLoss = realizedVol === undefined || spansEarnings(option.expirationDate, earningsDates)
       ? undefined
       : putExpectedAssignmentLoss(currentPrice, option.strike, dte, realizedVol);
 

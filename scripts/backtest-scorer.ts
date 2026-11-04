@@ -16,7 +16,7 @@
  *   then unwrap with: node -e "const r=JSON.parse(require('fs').readFileSync('scripts/data/raw-export.json'))[0].results;require('fs').writeFileSync('scripts/data/put-outcomes.json',JSON.stringify(r))"
  */
 import { readFileSync } from 'node:fs';
-import { OptionScorer } from '../src/utils/optionScorer';
+import { OptionScorer, spansEarnings } from '../src/utils/optionScorer';
 import { putDelta } from '../src/utils/blackScholes';
 import { DEFAULT_MARGIN_RATE, ReturnCalculator } from '../src/utils/returnCalculator';
 import { mean, spearman } from '../src/utils/rankStats';
@@ -45,11 +45,17 @@ interface Scored extends OutcomeRow {
   absDelta: number;
   annYield: number;
   group: string;
+  earningsSpan: boolean;
 }
 
 const MIN_GROUP_SIZE = 5;
 const datasetPath = process.argv[2] ?? 'scripts/data/put-outcomes.json';
 const rows: OutcomeRow[] = JSON.parse(readFileSync(datasetPath, 'utf8'));
+/** symbol -> known earnings report times (last and next from Yahoo calendarEvents) */
+const earningsPath = process.argv[3] ?? 'scripts/data/earnings-dates.json';
+const earnings: Record<string, { last: string | null; next: string | null }> = JSON.parse(readFileSync(earningsPath, 'utf8'));
+const earningsDatesFor = (symbol: string): string[] =>
+  [earnings[symbol]?.last, earnings[symbol]?.next].filter((d): d is string => typeof d === 'string');
 
 const realNow = Date.now;
 const scored: Scored[] = rows.map(r => {
@@ -57,13 +63,14 @@ const scored: Scored[] = rows.map(r => {
   const s = OptionScorer.calculateScore({
     bid: r.bid, ask: r.ask, strike: r.strike, expirationDate: r.expiration_date,
     impliedVolatility: r.implied_volatility, volume: r.volume, openInterest: r.open_interest,
-  }, r.spot_price, r.realized_vol ?? undefined);
+  }, r.spot_price, r.realized_vol ?? undefined, earningsDatesFor(r.symbol));
+  const earningsSpan = spansEarnings(r.expiration_date, earningsDatesFor(r.symbol));
   Date.now = realNow;
   // realized_return is per-share dollars; express as % of collateral
   const retPct = ReturnCalculator.calculateSimpleReturn({ premium: 1, strike: r.strike, marginRate: DEFAULT_MARGIN_RATE }) * r.realized_return;
   const absDelta = Math.abs(putDelta(r.spot_price, r.strike, r.dte_at_score, r.implied_volatility) ?? NaN);
   const annYield = ReturnCalculator.calculateAnnualizedReturn({ premium: r.bid, strike: r.strike, daysToExpiry: r.dte_at_score, marginRate: DEFAULT_MARGIN_RATE });
-  return { ...r, score: s.total, expectedReturnScore: s.expectedReturnScore, retPct, absDelta, annYield, group: `${r.symbol}|${r.expiration_date}` };
+  return { ...r, score: s.total, expectedReturnScore: s.expectedReturnScore, retPct, absDelta, annYield, group: `${r.symbol}|${r.expiration_date}`, earningsSpan };
 }).filter(r => r.dte_at_score > 0 && r.bid > 0 && r.absDelta >= 0.05 && r.absDelta <= 0.5);
 
 const groupsOf = (xs: Scored[]): Scored[][] => {
@@ -120,6 +127,10 @@ for (const [lo, hi] of [[0, 10], [10, 20], [20, 30], [30, 45], [45, 61]]) {
 console.log('\n== split by realized vol ==');
 withDteBucket('rv present', scored.filter(r => r.realized_vol !== null));
 withDteBucket('rv absent', scored.filter(r => r.realized_vol === null));
+
+console.log('\n== split by earnings ==');
+withDteBucket('spans earnings', scored.filter(r => r.earningsSpan));
+withDteBucket('no earnings', scored.filter(r => !r.earningsSpan));
 
 console.log('\n== split by DTE ==');
 withDteBucket('dte < 10', dteIn(0, 10));
