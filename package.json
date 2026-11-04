@@ -16,7 +16,8 @@
     "worker:deploy:prod": "wrangler deploy --config wrangler.background.toml --env production",
     "db:migrate": "wrangler d1 migrations apply options-tracker-local --local",
     "db:migrate:prod": "wrangler d1 migrations apply options-tracker --env production --remote",
-    "test": "vitest run"
+    "test": "vitest run",
+    "backtest:scorer": "esbuild scripts/backtest-scorer.ts --bundle --platform=node --format=esm --log-level=error --outfile=node_modules/.cache/backtest-scorer.mjs && node node_modules/.cache/backtest-scorer.mjs"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.4",
