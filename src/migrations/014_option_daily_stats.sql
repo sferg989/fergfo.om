@@ -17,5 +17,5 @@ CREATE TABLE IF NOT EXISTS option_daily_stats (
     PRIMARY KEY (symbol, day, strike, expiration_date)
 );
 
--- Backfill of the retained window runs per symbol and 10-day chunk via
+-- Backfill of the retained window runs per symbol and 5-day chunk via
 -- scripts/backfill-option-daily-stats.sh; a single INSERT...SELECT exceeds D1's CPU limit.
