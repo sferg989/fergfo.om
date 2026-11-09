@@ -1,6 +1,7 @@
 import { ReturnCalculator } from './returnCalculator';
 import { putDelta } from './blackScholes';
 import type { OptionData, GroupedOption } from '../types/option';
+import { DTE_ZERO_UPPER } from './optionScorer';
 
 /**
  * Put delta band kept in the table. The 5-delta floor drops untradeable lottery tickets;
@@ -125,4 +126,10 @@ export const isStrikeInDeltaBand = (currentPrice: number, strike: number, dte: n
   }
   const magnitude = Math.abs(delta);
   return magnitude >= MIN_PUT_DELTA && magnitude <= MAX_PUT_DELTA;
+};
+
+/** True when the expiration still has a chance of a non-zero DTE score, so it is worth fetching and storing */
+export const isExpirationScorable = (expirationDate: Date, now = Date.now()): boolean => {
+  const dte = (expirationDate.getTime() - now) / (24 * 60 * 60 * 1000);
+  return dte > 0 && dte < DTE_ZERO_UPPER;
 };

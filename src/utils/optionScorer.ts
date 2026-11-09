@@ -22,7 +22,7 @@ const SCORE_WEIGHT = {
 const EXPECTED_RETURN_CAP_PCT = 60;
 /** DTE earning the full score; the score falls linearly to zero at 0 and at DTE_ZERO_UPPER */
 const DTE_PEAK = 38;
-const DTE_ZERO_UPPER = 90;
+export const DTE_ZERO_UPPER = 90;
 /** Open interest + volume mix that earns the full liquidity score */
 const LIQUIDITY_CAP = 10000;
 

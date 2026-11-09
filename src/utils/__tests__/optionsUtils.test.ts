@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { isStrikeInDeltaBand, MAX_PUT_DELTA, MIN_PUT_DELTA } from '../optionsUtils';
+import { isExpirationScorable, isStrikeInDeltaBand, MAX_PUT_DELTA, MIN_PUT_DELTA } from '../optionsUtils';
+import { DTE_ZERO_UPPER } from '../optionScorer';
 import { putDelta } from '../blackScholes';
 
 const SPOT = 100;
@@ -54,5 +55,23 @@ describe('isStrikeInDeltaBand', () => {
   it.each([0, undefined])('falls back to +/-10%% of spot when IV is %s', (iv) => {
     expect(isStrikeInDeltaBand(SPOT, 95, DTE, iv)).toBe(true);
     expect(isStrikeInDeltaBand(SPOT, 85, DTE, iv)).toBe(false);
+  });
+});
+
+describe('isExpirationScorable', () => {
+  const now = Date.UTC(2026, 10, 9);
+  const daysOut = (d: number) => new Date(now + d * 24 * 60 * 60 * 1000);
+
+  it('keeps an expiration inside the DTE window the scorer credits', () => {
+    expect(isExpirationScorable(daysOut(38), now)).toBe(true);
+  });
+
+  it('drops an expiration at or past the DTE where the score reaches zero', () => {
+    expect(isExpirationScorable(daysOut(DTE_ZERO_UPPER), now)).toBe(false);
+    expect(isExpirationScorable(daysOut(400), now)).toBe(false);
+  });
+
+  it('drops an already-expired date', () => {
+    expect(isExpirationScorable(daysOut(-1), now)).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 import { DatabaseService } from './database_service';
 import { OptionScorer } from '../utils/optionScorer';
-import { isValidSymbol, isStrikeInDeltaBand } from '../utils/optionsUtils';
+import { isValidSymbol, isStrikeInDeltaBand, isExpirationScorable } from '../utils/optionsUtils';
 import { putThetaPerDay } from '../utils/blackScholes';
 import { realizedVolatility } from '../utils/realizedVolatility';
 import YahooFinance from 'yahoo-finance2';
@@ -404,7 +404,8 @@ export class OptionsService {
   private async getAvailableExpirationDates(symbol: string): Promise<Date[]> {
     try {
       const optionsData = await yahooFinance.options(symbol, {});
-      return optionsData.expirationDates.map(dateStr => new Date(dateStr));
+      // Yahoo lists expirations years out; past DTE_ZERO_UPPER every put scores zero, so skip them
+      return optionsData.expirationDates.map(dateStr => new Date(dateStr)).filter(date => isExpirationScorable(date));
     } catch (error) {
       console.error(`Error fetching expiration dates for ${symbol}:`, error);
       return [];
