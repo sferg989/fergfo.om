@@ -239,11 +239,32 @@ export class DatabaseService {
   }
 
   /**
+   * Earliest expiration before `cutoffIso` that has a tracked contract with no outcome row, or
+   * null when every expired contract is settled. Puts only, so (symbol, strike, expiration)
+   * identifies a contract in both option_daily_stats and option_outcomes.
+   */
+  private async getOldestUnsettledExpiration(cutoffIso: string): Promise<string | null> {
+    const row = await this.db.prepare(`
+      SELECT MIN(expiration_date) AS oldest FROM (
+        SELECT symbol, strike, expiration_date FROM option_daily_stats WHERE expiration_date < ?
+        EXCEPT
+        SELECT symbol, strike, expiration_date FROM option_outcomes
+      )
+    `).bind(cutoffIso).first<{ oldest: string | null }>();
+    return row?.oldest ?? null;
+  }
+
+  /**
    * Contracts that expired before `cutoffIso` and have no outcome row, each with the
    * snapshot at the largest DTE <= 38 (picked via ROW_NUMBER()). Contracts never seen at
    * or below 38 DTE fall back to their oldest surviving snapshot.
    */
   async getExpiredContractsWithoutOutcome(cutoffIso: string, limit: number): Promise<ExpiredContract[]> {
+    // The window query below reads every expired option row (1.4M rows, ~6s) even when all of
+    // them are settled, so ask the small per-day aggregates first and start at the oldest gap.
+    const oldestUnsettled = await this.getOldestUnsettledExpiration(cutoffIso);
+    if (!oldestUnsettled) return [];
+
     // created_at and expiration_date are both ISO-8601 strings, which julianday() parses.
     // Pick the snapshot at the largest DTE <= 38; contracts never seen that close fall back to the oldest.
     const result = await this.db.prepare(`
@@ -264,12 +285,13 @@ export class DatabaseService {
         JOIN stock_snapshots ss ON ss.id = os.snapshot_id
         LEFT JOIN option_score_snapshots oss ON oss.option_snapshot_id = os.id
         WHERE os.expiration_date < ?
+          AND os.expiration_date >= ?
           AND NOT EXISTS (SELECT 1 FROM option_outcomes oo WHERE oo.contract_name = os.contract_name)
       )
       WHERE rn = 1
       ORDER BY expiration_date
       LIMIT ?
-    `).bind(cutoffIso, limit).all();
+    `).bind(cutoffIso, oldestUnsettled, limit).all();
 
     return result.results.map((row: unknown) => {
       const r = row as Record<string, unknown>;
