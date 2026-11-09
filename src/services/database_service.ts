@@ -9,6 +9,7 @@ import type { OptionData, OptionScore } from '../types/option';
 import type { ExpiredContract, OptionOutcome } from '../types/database';
 
 import { SCORER_VERSION } from '../utils/optionScorer';
+import { dailyStatRowsFor, type OptionDailyStatRow } from '../utils/optionDailyStats';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Statements per D1 batch call */
@@ -169,8 +170,41 @@ export class DatabaseService {
 
     const optionIds = await this.createOptionSnapshots(snapshotId, options);
     await this.createOptionScoreSnapshots(optionIds, scores);
+    await this.upsertOptionDailyStats(dailyStatRowsFor(symbol, new Date().toISOString(), options, scores));
 
     return snapshotId;
+  }
+
+  /** Fold one snapshot's options into the day's running aggregates */
+  private async upsertOptionDailyStats(rows: OptionDailyStatRow[]): Promise<void> {
+    const upsert = this.db.prepare(`
+      INSERT INTO option_daily_stats (
+        symbol, day, strike, expiration_date, snapshot_count, max_score, sum_score,
+        sum_last_price, max_volume, max_open_interest, min_bid, max_ask
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(symbol, day, strike, expiration_date) DO UPDATE SET
+        snapshot_count = snapshot_count + excluded.snapshot_count,
+        max_score = MAX(max_score, excluded.max_score),
+        sum_score = sum_score + excluded.sum_score,
+        sum_last_price = sum_last_price + excluded.sum_last_price,
+        max_volume = MAX(max_volume, excluded.max_volume),
+        max_open_interest = MAX(max_open_interest, excluded.max_open_interest),
+        min_bid = MIN(min_bid, excluded.min_bid),
+        max_ask = MAX(max_ask, excluded.max_ask)
+    `);
+    await this.runInBatches(rows.map(r => upsert.bind(
+      r.symbol, r.day, r.strike, r.expirationDate, r.snapshotCount, r.maxScore, r.sumScore,
+      r.sumLastPrice, r.maxVolume, r.maxOpenInterest, r.minBid, r.maxAsk
+    )));
+  }
+
+  /** Delete daily option stats older than `cutoffDay` (YYYY-MM-DD), at most `limit` per call */
+  async deleteOptionDailyStatsBefore(cutoffDay: string, limit: number): Promise<number> {
+    const result = await this.db.prepare(`
+      DELETE FROM option_daily_stats
+      WHERE rowid IN (SELECT rowid FROM option_daily_stats WHERE day < ? ORDER BY day LIMIT ?)
+    `).bind(cutoffDay, limit).run();
+    return result.meta.changes ?? 0;
   }
 
   /** Serialized Yahoo cookie jar saved by a previous worker run, or null if none yet. */
@@ -418,30 +452,25 @@ export class DatabaseService {
     days: number = 30,
     limit: number = 10
   ): Promise<TopPerformingOption[]> {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - days);
+    const cutoffDay = new Date(Date.now() - days * DAY_MS).toISOString().slice(0, 10);
 
-    const stmt = this.db.prepare(`
+    const result = await this.db.prepare(`
       SELECT
-        os.strike,
-        os.expiration_date as expirationDate,
-        MAX(oss.total_score) as totalScore,
-        AVG(os.last_price) as avgPrice,
-        MAX(os.volume) as maxVolume,
-        MAX(os.open_interest) as maxOpenInterest,
-        MIN(os.bid) as bestBid,
-        MAX(os.ask) as bestAsk,
-        COUNT(*) as snapshotCount
-      FROM option_snapshots os
-      JOIN stock_snapshots ss ON os.snapshot_id = ss.id
-      JOIN option_score_snapshots oss ON os.id = oss.option_snapshot_id
-      WHERE ss.symbol = ? AND ss.created_at >= ?
-      GROUP BY os.strike, os.expiration_date
-      ORDER BY MAX(oss.total_score) DESC
+        strike,
+        expiration_date as expirationDate,
+        MAX(max_score) as totalScore,
+        SUM(sum_last_price) / SUM(snapshot_count) as avgPrice,
+        MAX(max_volume) as maxVolume,
+        MAX(max_open_interest) as maxOpenInterest,
+        MIN(min_bid) as bestBid,
+        MAX(max_ask) as bestAsk,
+        SUM(snapshot_count) as snapshotCount
+      FROM option_daily_stats
+      WHERE symbol = ? AND day >= ?
+      GROUP BY strike, expiration_date
+      ORDER BY MAX(max_score) DESC
       LIMIT ?
-    `);
-
-    const result = await stmt.bind(symbol.toUpperCase(), cutoffDate.toISOString(), limit).all();
+    `).bind(symbol.toUpperCase(), cutoffDay, limit).all();
 
     return result.results as unknown as TopPerformingOption[];
   }
@@ -506,45 +535,55 @@ export class DatabaseService {
   }
 
   /**
-   * Get performance summary for a symbol
+   * Per-day price range from stock_snapshots joined to the day's option aggregates
    */
   async getStockPerformanceData(symbol: string, days: number = 30): Promise<StockPerformanceData> {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - days);
-    
-    const stmt = this.db.prepare(`
-      SELECT 
-        DATE(ss.created_at) as date,
-        MIN(ss.current_price) as low_price,
-        MAX(ss.current_price) as high_price,
-        AVG(ss.current_price) as avg_price,
-        MAX(oss.total_score) as top_option_score,
-        AVG(oss.total_score) as avg_option_score,
-        COUNT(DISTINCT os.id) as unique_options_count,
-        COUNT(ss.id) as snapshot_count
-      FROM stock_snapshots ss
-      LEFT JOIN option_snapshots os ON ss.id = os.snapshot_id
-      LEFT JOIN option_score_snapshots oss ON os.id = oss.option_snapshot_id
-      WHERE ss.symbol = ? AND ss.created_at >= ?
-      GROUP BY DATE(ss.created_at)
-      ORDER BY date DESC
-    `);
-    
-    const result = await stmt.bind(symbol.toUpperCase(), cutoffDate.toISOString()).all();
-    
+    const cutoffDay = new Date(Date.now() - days * DAY_MS).toISOString().slice(0, 10);
+
+    const result = await this.db.prepare(`
+      SELECT
+        p.date,
+        p.low_price,
+        p.high_price,
+        p.avg_price,
+        o.top_option_score,
+        o.avg_option_score,
+        o.options_count
+      FROM (
+        SELECT DATE(created_at) as date,
+               MIN(current_price) as low_price,
+               MAX(current_price) as high_price,
+               AVG(current_price) as avg_price
+        FROM stock_snapshots
+        WHERE symbol = ? AND created_at >= ?
+        GROUP BY DATE(created_at)
+      ) p
+      LEFT JOIN (
+        SELECT day,
+               MAX(max_score) as top_option_score,
+               SUM(sum_score) / SUM(snapshot_count) as avg_option_score,
+               SUM(snapshot_count) as options_count
+        FROM option_daily_stats
+        WHERE symbol = ? AND day >= ?
+        GROUP BY day
+      ) o ON o.day = p.date
+      ORDER BY p.date DESC
+    `).bind(symbol.toUpperCase(), cutoffDay, symbol.toUpperCase(), cutoffDay).all();
+
     return {
       symbol: symbol.toUpperCase(),
       snapshots: result.results.map((row: unknown) => {
-        const r = row as Record<string, any>;
+        const r = row as Record<string, number | string | null>;
         return {
-          date: r.date,
-          lowPrice: r.low_price,
-          highPrice: r.high_price,
-          avgPrice: r.avg_price,
-          topOptionScore: r.top_option_score || 0,
-          avgOptionScore: r.avg_option_score || 0,
-          uniqueOptionsCount: r.unique_options_count,
-          snapshotCount: r.snapshot_count
+          date: r.date as string,
+          lowPrice: r.low_price as number,
+          highPrice: r.high_price as number,
+          avgPrice: r.avg_price as number,
+          topOptionScore: (r.top_option_score as number | null) ?? 0,
+          avgOptionScore: (r.avg_option_score as number | null) ?? 0,
+          // Every stored option row is a distinct contract observation, as the old COUNT(DISTINCT os.id) counted
+          uniqueOptionsCount: (r.options_count as number | null) ?? 0,
+          snapshotCount: (r.options_count as number | null) ?? 0
         };
       })
     };

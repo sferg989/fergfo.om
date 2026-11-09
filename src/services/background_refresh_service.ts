@@ -87,12 +87,11 @@ export class BackgroundRefreshService {
    */
   async pruneOldSnapshots(): Promise<number> {
     const cutoff = new Date(Date.now() - SNAPSHOT_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    const dailyCutoff = new Date(Date.now() - DAILY_CLOSE_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const dbService = DatabaseService.getInstance(this.db);
     const deleted = await dbService.deleteSnapshotsBefore(cutoff, PRUNE_BATCH_SIZE)
-      + await dbService.deleteDailyClosesBefore(
-        new Date(Date.now() - DAILY_CLOSE_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-        PRUNE_BATCH_SIZE
-      );
+      + await dbService.deleteDailyClosesBefore(dailyCutoff, PRUNE_BATCH_SIZE)
+      + await dbService.deleteOptionDailyStatsBefore(dailyCutoff, PRUNE_BATCH_SIZE);
     if (deleted > 0) {
       console.log(`[PRUNE] Deleted ${deleted} rows (snapshots plus cascaded options/scores) older than ${cutoff}`);
     }
