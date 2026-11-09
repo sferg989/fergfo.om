@@ -14,4 +14,8 @@ export enum PreferredStocks {
   AMZN = 'AMZN',
   NFLX = 'NFLX',
   MSFT = 'MSFT',
+  AVGO = 'AVGO',
+  PLTR = 'PLTR',
+  MRVL = 'MRVL',
+  DELL = 'DELL',
 } 
