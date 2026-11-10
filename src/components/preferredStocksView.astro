@@ -2,48 +2,71 @@
 import { PreferredStocks } from '../enums/preferredStocks';
 import StockOptionsSection from './stock_options_section.astro';
 import { OptionsService } from '../services/optionsService';
-import type { OptionData } from '../types/option';
+import { OptionScorer } from '../utils/optionScorer';
+import { ReturnCalculator } from '../utils/returnCalculator';
+import type { ScoredOption, StockSectionData } from '../types/option';
 import '../styles/optionsTable.css';
 
-interface FetchedData {
-  options: OptionData[];
-  currentPrice: number;
-  error?: string;
-}
-
+const DAY_MS = 1000 * 60 * 60 * 24;
 const symbols = Object.values(PreferredStocks);
 const db = (Astro.locals.runtime?.env?.DB as D1Database) || null;
-let stocksData: { symbol: string; data: FetchedData }[] = [];
+
+const emptySection = (symbol: string, error: string): StockSectionData => ({
+  symbol,
+  currentPrice: 0,
+  topOptions: [],
+  highestScore: 0,
+  bestAnnualizedPremium: 0,
+  error,
+});
+
+async function loadSection(optionsService: OptionsService, symbol: string): Promise<StockSectionData> {
+  const rawData = await optionsService.fetchOptionsData(symbol);
+  if (rawData.error) {return emptySection(symbol, rawData.error);}
+
+  const scoredOptions: ScoredOption[] = rawData.options
+    .map(option => ({
+      ...option,
+      score: OptionScorer.calculateScore(option, rawData.currentPrice, rawData.realizedVol, rawData.earningsDates),
+    }))
+    .sort((a, b) => b.score.total - a.score.total);
+
+  const highestScore = scoredOptions.length > 0 ? scoredOptions[0].score.total : 0;
+  // All options sharing the highest score (small epsilon for float comparison)
+  const topOptions = scoredOptions.filter(option => Math.abs(option.score.total - highestScore) < 0.01);
+  const bestAnnualizedPremium = Math.max(0, ...topOptions.map(option =>
+    ReturnCalculator.calculateAnnualizedReturn({
+      premium: option.bid,
+      strike: option.strike,
+      daysToExpiry: Math.ceil((new Date(option.expirationDate).getTime() - Date.now()) / DAY_MS),
+      marginRate: 1,
+    })
+  ));
+
+  return { symbol, currentPrice: rawData.currentPrice, topOptions, highestScore, bestAnnualizedPremium };
+}
+
+let sections: StockSectionData[];
 
 if (db) {
   const optionsService = OptionsService.getInstance(db);
-  const promises = symbols.map((symbol) => optionsService.fetchOptionsData(symbol));
-  const results = await Promise.allSettled(promises);
-
-  stocksData = results.map((result, index) => {
-    const symbol = symbols[index];
-    if (result.status === 'fulfilled') {
-      return { symbol, data: result.value };
-    }
-    return {
-      symbol,
-      data: {
-        options: [],
-        currentPrice: 0,
-        error: result.reason instanceof Error ? result.reason.message : 'Unknown error fetching data',
-      },
-    };
+  const results = await Promise.allSettled(symbols.map(symbol => loadSection(optionsService, symbol)));
+  sections = results.map((result, index) => {
+    if (result.status === 'fulfilled') {return result.value;}
+    console.error(`Error fetching options for ${symbols[index]}:`, result.reason);
+    return emptySection(
+      symbols[index],
+      result.reason instanceof Error ? result.reason.message : 'Unknown error fetching data'
+    );
   });
 } else {
-  stocksData = symbols.map((symbol) => ({
-    symbol,
-    data: {
-      options: [],
-      currentPrice: 0,
-      error: 'Database not available',
-    },
-  }));
+  sections = symbols.map(symbol => emptySection(symbol, 'Database not available'));
 }
+
+// Best score first; equal scores ranked by the annualized premium of their top option
+sections.sort((a, b) =>
+  b.highestScore - a.highestScore || b.bestAnnualizedPremium - a.bestAnnualizedPremium
+);
 ---
 
 <div class="preferred-stocks-container">
@@ -52,11 +75,7 @@ if (db) {
   </div>
 
   <div class="grid gap-8" id="stocks-container">
-    {
-      stocksData.map(({ symbol }) => (
-        <StockOptionsSection symbol={symbol} />
-      ))
-    }
+    {sections.map((section) => <StockOptionsSection {...section} />)}
   </div>
 </div>
 

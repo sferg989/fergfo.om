@@ -1,86 +1,10 @@
 ---
-import { OptionsService } from '../services/optionsService';
 import { OptionScorer } from '../utils/optionScorer';
-import type { ScoredOption, OptionData } from '../types/option';
+import type { StockSectionData } from '../types/option';
 
-interface Props {
-  symbol: string;
-}
+type Props = StockSectionData;
 
-const { symbol } = Astro.props;
-
-// Standard D1 database access pattern
-const db = (Astro.locals.runtime?.env?.DB as D1Database) || null;
-
-let optionsData: {
-  options: OptionData[];
-  currentPrice: number;
-  scoredOptions: ScoredOption[];
-  topOptions: ScoredOption[];
-  highestScore: number;
-  error?: string;
-} = {
-  options: [],
-  currentPrice: 0,
-  scoredOptions: [],
-  topOptions: [],
-  highestScore: 0
-};
-
-
-if (db) {
-  try {
-    const optionsService = OptionsService.getInstance(db);
-
-    // Fetch options data
-    const rawData = await optionsService.fetchOptionsData(symbol);
-
-    if (rawData.error) {
-      optionsData = {
-        ...optionsData,
-        error: rawData.error
-      };
-    } else if (rawData.options.length > 0) {
-      // Score the options
-      const scoredOptions: ScoredOption[] = rawData.options
-        .map(option => ({
-          ...option,
-          score: OptionScorer.calculateScore(option, rawData.currentPrice, rawData.realizedVol, rawData.earningsDates)
-        }))
-        .sort((a, b) => b.score.total - a.score.total);
-
-      // Get the highest score
-      const highestScore = scoredOptions.length > 0 ? scoredOptions[0].score.total : 0;
-
-      // Get all options with the highest score (including ties)
-      const topOptions = scoredOptions.filter(option =>
-        Math.abs(option.score.total - highestScore) < 0.01 // Using small epsilon for float comparison
-      );
-
-      optionsData = {
-        options: rawData.options,
-        currentPrice: rawData.currentPrice,
-        scoredOptions,
-        topOptions,
-        highestScore,
-      };
-    }
-
-
-  } catch (err) {
-    console.error(`Error fetching options for ${symbol}:`, err);
-    optionsData = {
-      ...optionsData,
-      error: err instanceof Error ? err.message : 'Failed to fetch options data'
-    };
-  }
-} else {
-  console.warn(`Database not available for ${symbol}`);
-  optionsData = {
-    ...optionsData,
-    error: 'Database not available'
-  };
-}
+const { symbol, currentPrice, topOptions, highestScore, error } = Astro.props;
 
 // Helper functions
 function formatDate(dateString: string): string {
@@ -99,14 +23,14 @@ function calculateAnnualPremium(bid: number, strike: number, daysToExpiry: numbe
     <h2 class="text-xl font-semibold text-blue-600">{symbol}</h2>
   </div>
 
-  {optionsData.error ? (
+  {error ? (
     <div class="p-4 bg-red-50 text-red-700 rounded">
-      Error: {optionsData.error}
+      Error: {error}
     </div>
-  ) : optionsData.topOptions.length > 0 ? (
+  ) : topOptions.length > 0 ? (
     <div class="high-score-section">
       <h3 class="text-lg font-bold mb-3">
-        🏆 Top Scoring Options (Score: {Math.round(optionsData.highestScore)})
+        🏆 Top Scoring Options (Score: {Math.round(highestScore)})
       </h3>
       <div class="overflow-x-auto">
         <table class="options-table">
@@ -126,12 +50,12 @@ function calculateAnnualPremium(bid: number, strike: number, daysToExpiry: numbe
             </tr>
           </thead>
           <tbody>
-            {optionsData.topOptions.map((option) => {
+            {topOptions.map((option) => {
               const dte = Math.ceil(
                 (new Date(option.expirationDate).getTime() - new Date().getTime()) /
                 (1000 * 60 * 60 * 24)
               );
-              const simplePremiumPct = (option.bid / optionsData.currentPrice * 100).toFixed(2);
+              const simplePremiumPct = (option.bid / currentPrice * 100).toFixed(2);
               const annualPremium = calculateAnnualPremium(option.bid, option.strike, dte);
               const scoreClass = OptionScorer.getScoreClass(option.score.total);
 

@@ -45,3 +45,13 @@ export interface StockOptionsData {
   fetchedAt?: string;
   error?: string;
 } 
+/** One preferred symbol's top-scoring options, as rendered on /preferred */
+export interface StockSectionData {
+  symbol: string;
+  currentPrice: number;
+  topOptions: ScoredOption[];
+  highestScore: number;
+  /** Annualized premium % of the best top option, used to rank symbols with equal scores */
+  bestAnnualizedPremium: number;
+  error?: string;
+}
