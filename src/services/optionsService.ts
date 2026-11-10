@@ -1,6 +1,6 @@
 import { DatabaseService } from './database_service';
 import { OptionScorer } from '../utils/optionScorer';
-import { isValidSymbol, isStrikeInDeltaBand, isExpirationScorable } from '../utils/optionsUtils';
+import { isValidSymbol, isStrikeInDeltaBand, isExpirationScorable, isBidConsistentWithChain } from '../utils/optionsUtils';
 import { putThetaPerDay } from '../utils/blackScholes';
 import { realizedVolatility } from '../utils/realizedVolatility';
 import YahooFinance from 'yahoo-finance2';
@@ -417,10 +417,12 @@ export class OptionsService {
       (expirationDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
     );
 
+    const pricedPuts = puts.map(p => ({ strike: p.strike, bid: p.bid ?? 0 }));
     return puts
       .filter(option => {
         return isStrikeInDeltaBand(currentPrice, option.strike, daysToExpiry, option.impliedVolatility) &&
-               (option.bid ?? 0) > 0; // Only include options with meaningful bid prices
+               (option.bid ?? 0) > 0 && // Only include options with meaningful bid prices
+               isBidConsistentWithChain(pricedPuts, { strike: option.strike, bid: option.bid ?? 0 });
       })
       .map((option): OptionData => {
         const estimatedTheta = putThetaPerDay(currentPrice, option.strike, daysToExpiry, option.impliedVolatility ?? 0);

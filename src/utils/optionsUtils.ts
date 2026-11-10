@@ -128,6 +128,29 @@ export const isStrikeInDeltaBand = (currentPrice: number, strike: number, dte: n
   return magnitude >= MIN_PUT_DELTA && magnitude <= MAX_PUT_DELTA;
 };
 
+/**
+ * No-arbitrage bounds on a put bid against its nearest priced neighbours in the same expiration:
+ * a higher strike is worth at least as much, and at most the strike gap more. A quote that breaks
+ * a bound against every neighbour it has is a bad print (Yahoo served a $665 MSFT put at $267.90
+ * between $116 and $125.75 strikes) and its bogus IV sails through the delta band, so drop it.
+ */
+export const isBidConsistentWithChain = (
+  chain: ReadonlyArray<{ strike: number; bid: number }>,
+  option: { strike: number; bid: number }
+): boolean => {
+  const priced = chain.filter(q => q.bid > 0 && q.strike !== option.strike);
+  const lower = priced.filter(q => q.strike < option.strike).sort((a, b) => b.strike - a.strike)[0];
+  const upper = priced.filter(q => q.strike > option.strike).sort((a, b) => a.strike - b.strike)[0];
+  const withinBounds = (low: { strike: number; bid: number }, high: { strike: number; bid: number }) =>
+    high.bid >= low.bid && high.bid - low.bid <= high.strike - low.strike;
+
+  const checks = [
+    ...(lower ? [withinBounds(lower, option)] : []),
+    ...(upper ? [withinBounds(option, upper)] : []),
+  ];
+  return checks.length === 0 || checks.some(Boolean);
+};
+
 /** True when the expiration still has a chance of a non-zero DTE score, so it is worth fetching and storing */
 export const isExpirationScorable = (expirationDate: Date, now = Date.now()): boolean => {
   const dte = (expirationDate.getTime() - now) / (24 * 60 * 60 * 1000);

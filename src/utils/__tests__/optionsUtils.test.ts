@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isExpirationScorable, isStrikeInDeltaBand, MAX_PUT_DELTA, MIN_PUT_DELTA } from '../optionsUtils';
+import { isBidConsistentWithChain, isExpirationScorable, isStrikeInDeltaBand, MAX_PUT_DELTA, MIN_PUT_DELTA } from '../optionsUtils';
 import { DTE_ZERO_UPPER } from '../optionScorer';
 import { putDelta } from '../blackScholes';
 
@@ -73,5 +73,37 @@ describe('isExpirationScorable', () => {
 
   it('drops an already-expired date', () => {
     expect(isExpirationScorable(daysOut(-1), now)).toBe(false);
+  });
+});
+
+describe('isBidConsistentWithChain', () => {
+  const quote = (strike: number, bid: number) => ({ strike, bid });
+
+  it('keeps a quote whose bid rises with strike by no more than the strike gap', () => {
+    const chain = [quote(90, 1.0), quote(95, 2.0), quote(100, 4.0)];
+    expect(isBidConsistentWithChain(chain, chain[1])).toBe(true);
+  });
+
+  it('drops a bad print bid far above both neighbours, as Yahoo served for MSFT Jan-27 665', () => {
+    const chain = [quote(655, 111.0), quote(660, 116.0), quote(665, 267.9), quote(670, 125.75), quote(675, 130.3)];
+    expect(isBidConsistentWithChain(chain, chain[2])).toBe(false);
+    // The good quotes either side break a bound against the bad print only, so they stay
+    expect(isBidConsistentWithChain(chain, chain[1])).toBe(true);
+    expect(isBidConsistentWithChain(chain, chain[3])).toBe(true);
+  });
+
+  it('keeps a quote whose bid dips a touch below the lower strike, as stale bids do', () => {
+    const chain = [quote(90, 0.52), quote(95, 0.51), quote(100, 0.80)];
+    expect(isBidConsistentWithChain(chain, chain[1])).toBe(true);
+  });
+
+  it('ignores zero-bid neighbours when comparing', () => {
+    const chain = [quote(90, 1.0), quote(95, 0), quote(100, 2.0)];
+    expect(isBidConsistentWithChain(chain, chain[2])).toBe(true);
+  });
+
+  it('keeps a quote with no priced neighbours', () => {
+    const chain = [quote(100, 2.0)];
+    expect(isBidConsistentWithChain(chain, chain[0])).toBe(true);
   });
 });
