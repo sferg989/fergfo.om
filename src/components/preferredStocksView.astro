@@ -1,7 +1,4 @@
-// Best displayed (rounded) score first; equal scores ranked by the annualized premium of their top option
-sections.sort((a, b) =>
-  Math.round(b.highestScore) - Math.round(a.highestScore) || b.bestAnnualizedPremium - a.bestAnnualizedPremium
-);---
+---
 import { PreferredStocks } from '../enums/preferredStocks';
 import StockOptionsSection from './stock_options_section.astro';
 import { OptionsService } from '../services/optionsService';
@@ -66,9 +63,9 @@ if (db) {
   sections = symbols.map(symbol => emptySection(symbol, 'Database not available'));
 }
 
-// Best score first; equal scores ranked by the annualized premium of their top option
+// Best displayed (rounded) score first; equal scores ranked by the annualized premium of their top option
 sections.sort((a, b) =>
-  b.highestScore - a.highestScore || b.bestAnnualizedPremium - a.bestAnnualizedPremium
+  Math.round(b.highestScore) - Math.round(a.highestScore) || b.bestAnnualizedPremium - a.bestAnnualizedPremium
 );
 ---
 
