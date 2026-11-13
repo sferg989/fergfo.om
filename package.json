@@ -17,7 +17,9 @@
     "db:migrate": "wrangler d1 migrations apply options-tracker-local --local",
     "db:migrate:prod": "wrangler d1 migrations apply options-tracker --env production --remote",
     "test": "vitest run",
-    "backtest:scorer": "esbuild scripts/backtest-scorer.ts --bundle --platform=node --format=esm --log-level=error --outfile=node_modules/.cache/backtest-scorer.mjs && node node_modules/.cache/backtest-scorer.mjs"
+    "backtest:scorer": "esbuild scripts/backtest-scorer.ts --bundle --platform=node --format=esm --log-level=error --outfile=node_modules/.cache/backtest-scorer.mjs && node node_modules/.cache/backtest-scorer.mjs",
+    "backtest:call-vol": "esbuild scripts/backtest-call-vol.ts --bundle --platform=node --format=esm --log-level=error --outfile=node_modules/.cache/backtest-call-vol.mjs && node node_modules/.cache/backtest-call-vol.mjs",
+    "backtest:call-score": "esbuild scripts/backtest-call-score.ts --bundle --platform=node --format=esm --log-level=error --outfile=node_modules/.cache/backtest-call-score.mjs && node node_modules/.cache/backtest-call-score.mjs"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.4",
