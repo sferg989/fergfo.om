@@ -1,0 +1,125 @@
+---
+export const prerender = false;
+
+import Layout from '../layouts/Layout.astro';
+import CallSymbolRow from '../components/callSymbolRow.astro';
+import { PreferredStocks } from '../enums/preferredStocks';
+import { DatabaseService } from '../services/database_service';
+import { buildCallSections, type CallSymbolSection } from '../utils/callPageData';
+
+const db = (Astro.locals.runtime?.env?.DB as D1Database) || null;
+
+let sections: CallSymbolSection[] = [];
+if (db) {
+  const dbService = DatabaseService.getInstance(db);
+  const [quotes, refreshes] = await Promise.all([dbService.getLatestCallQuotes(), dbService.getLatestCallRefreshes()]);
+  sections = buildCallSections(Object.values(PreferredStocks), quotes, refreshes);
+}
+
+const withCalls = sections.filter(section => section.best);
+const withoutCalls = sections.filter(section => !section.best);
+const latestFetch = withCalls.map(section => section.fetchedAt).filter((t): t is string => t !== null).sort().at(-1);
+const asOf = latestFetch
+  ? new Date(latestFetch).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })
+  : null;
+const chip = 'rounded-full px-2 py-0.5 text-xs font-semibold';
+---
+
+<Layout title="Long Calls" description="Best-value long-dated call on each preferred stock, scored by its excess cost of holding.">
+  <main class="mx-auto max-w-[1200px] px-4 pb-16 pt-7 text-gray-800">
+    <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+      <h1 class="text-3xl font-bold tracking-tight text-gray-900">Long Calls</h1>
+      {asOf && <span class="text-[13px] text-gray-500">Closing prices, fetched {asOf} ET</span>}
+    </div>
+    <p class="mt-2 max-w-[78ch] text-gray-600 [text-wrap:pretty]">
+      The best-value call on each stock, 12 months out or longer. The score rates the contract's price, not the stock:
+      it says how much more than fair value you pay each year to hold it.
+    </p>
+
+    {!db ? (
+      <p class="mt-6 rounded bg-red-50 p-4 text-red-700">Database not available</p>
+    ) : (
+      <>
+        <p class="my-4 max-w-[100ch] rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-900">
+          <b class="font-semibold">Comparing stocks is approximate.</b> Fair value depends on a volatility forecast that is
+          typically off by about 19%. Where the verdict says "In range", the gap between ask and fair is inside that error.
+          Comparing strikes within one stock is reliable.
+        </p>
+
+        {withCalls.length > 0 && (
+          <div class="mb-2.5 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px] text-gray-500">
+            <span class="flex items-center gap-1.5">
+              <span class="relative inline-block h-2 w-[90px] rounded bg-gray-100" aria-hidden="true">
+                <span class="absolute inset-y-0 left-[20%] w-[55%] rounded bg-blue-200"></span>
+                <span class="absolute -inset-y-[3px] left-[46%] w-0.5 bg-blue-700"></span>
+                <span class="absolute left-[62%] top-1/2 -ml-1.5 -mt-1.5 h-3 w-3 rounded-full border-2 border-white bg-gray-700 ring-1 ring-black/25"></span>
+              </span>
+              shaded = fair range, line = fair value, dot = ask
+            </span>
+            <span><span class={`${chip} bg-emerald-600 text-white`}>Cheap</span> ask below the range</span>
+            <span><span class={`${chip} bg-gray-100 text-gray-600`}>In range</span> within forecast error</span>
+            <span><span class={`${chip} bg-amber-100 text-amber-800`}>Rich</span> ask above the range</span>
+          </div>
+        )}
+
+        {withCalls.map(section => <CallSymbolRow {...section} />)}
+
+        {withoutCalls.length > 0 && (
+          <section class="mt-6">
+            <h2 class="mb-2 text-sm font-semibold text-gray-700">Nothing to show</h2>
+            <ul class="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white text-sm">
+              {withoutCalls.map(section => (
+                <li class="flex flex-wrap justify-between gap-x-6 px-4 py-2">
+                  <b class="font-semibold text-gray-900">{section.symbol}</b>
+                  <span class="text-gray-500">{section.note}</span>
+                </li>
+              ))}
+            </ul>
+            <p class="mt-2 text-[13px] text-gray-500">Long calls refresh once per market day, after the close, between 4:30 and 5:25 PM ET.</p>
+          </section>
+        )}
+
+        <details class="mt-6 rounded-lg border border-gray-200 bg-white px-4">
+          <summary class="cursor-pointer py-3.5 font-semibold text-gray-900">How to read this</summary>
+          <dl class="max-w-[80ch] pb-4 text-gray-700 [&_dd]:mt-0.5 [&_dt]:mt-2.5 [&_dt]:font-semibold">
+            <dt>Cost per year</dt>
+            <dd>
+              What you pay above fair value, plus half the spread you give up when you sell, as a percent of the stock exposure the
+              call gives you, per year held to expiry. Zero is fair. Negative is a bargain. It reads like a fund's expense ratio.
+            </dd>
+            <dt>Score</dt>
+            <dd>
+              100 at a cost of -4% a year or better, 0 at +8% a year or worse. A fairly priced call scores 67, and a call scores above
+              67 only when its verdict is Cheap.
+            </dd>
+            <dt>Fair value</dt>
+            <dd>
+              Black-Scholes at the stock's own three-year volatility, with dividends. The range uses that volatility 19% lower and
+              higher, its typical forecast error.
+            </dd>
+            <dt>Which calls</dt>
+            <dd>
+              Expiring at least 365 days out, with delta between 0.60 and 0.90. Quotes that are one-sided, below intrinsic value, out
+              of line with neighbouring strikes, or wider than 15% of the ask are dropped.
+            </dd>
+            <dt>What Cheap means</dt>
+            <dd>
+              The market expects much calmer trading than the stock's last three years. That is often because a
+              turbulent stretch is ageing out of the history, not because the call is mispriced. Treat Cheap as a
+              reason to look closer, not as a signal to buy.
+            </dd>
+            <dt>Breakeven per year</dt>
+            <dd>How fast the stock must rise for the call to be worth what you paid at expiry. Shown, not scored.</dd>
+            <dt>Leverage</dt>
+            <dd>Dollars of stock exposure per dollar spent. Shown, not scored.</dd>
+            <dt>Limits</dt>
+            <dd>
+              The model assumes no crashes, so deep in-the-money calls read slightly richer than they are. Early exercise is ignored.
+              These are closing quotes; confirm the live quote before trading, especially on a Cheap verdict.
+            </dd>
+          </dl>
+        </details>
+      </>
+    )}
+  </main>
+</Layout>

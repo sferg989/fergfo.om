@@ -1,0 +1,161 @@
+---
+import CallFairRange from './callFairRange.astro';
+import { OptionScorer, type ScoreClass } from '../utils/optionScorer';
+import { callBreakevenPerYear, callLeverage } from '../utils/callScorer';
+import type { CallSymbolSection } from '../utils/callPageData';
+import type { CallQuoteRow, CallVerdict } from '../types/call';
+
+type Props = CallSymbolSection;
+
+const { symbol, day, stale, dropped, best, expirations, note } = Astro.props;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const money = (value: number): string =>
+  `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const strike = (value: number): string => `$${Number.isInteger(value) ? value : value.toFixed(1)}`;
+const percent = (fraction: number, digits = 1): string => `${(fraction * 100).toFixed(digits)}%`;
+const signedPercent = (fraction: number): string => `${fraction >= 0 ? '+' : ''}${percent(fraction)}`;
+const expiryLabel = (iso: string): string => {
+  const date = new Date(iso);
+  const monthDay = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  return `${monthDay} '${String(date.getUTCFullYear()).slice(2)}`;
+};
+const daysFrom = (call: CallQuoteRow): number =>
+  Math.round((new Date(call.expirationDate).getTime() - new Date(`${call.day}T12:00:00Z`).getTime()) / DAY_MS);
+const breakeven = (call: CallQuoteRow): number => callBreakevenPerYear(call.strike, call.ask, call.spot, daysFrom(call));
+const leverage = (call: CallQuoteRow): number => callLeverage(call.delta, call.spot, call.ask);
+
+const chipClass: Record<CallVerdict, string> = {
+  Cheap: 'bg-emerald-600 text-white',
+  'In range': 'bg-gray-100 text-gray-600',
+  Rich: 'bg-amber-100 text-amber-800',
+};
+// Same bands as the put pages; their colours live in page-scoped CSS, so they are restated here
+const scoreColor: Record<ScoreClass, string> = {
+  'score-excellent': 'bg-green-100 text-green-800',
+  'score-good': 'bg-emerald-100 text-emerald-700',
+  'score-moderate': 'bg-emerald-50 text-teal-700',
+  'score-weak': 'bg-sky-50 text-sky-700',
+  'score-poor': 'bg-gray-100 text-gray-600',
+};
+const scoreClass = (score: number): string => scoreColor[OptionScorer.getScoreClass(score)];
+const scored = expirations.reduce((count, expiration) => count + expiration.calls.length, 0);
+// Three columns on a phone; one row of ten columns from the lg breakpoint
+const summaryClass = [
+  'grid cursor-pointer list-none items-center gap-x-4 gap-y-2 rounded-lg px-4 py-3 hover:bg-gray-50',
+  'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600',
+  'grid-cols-3 lg:grid-cols-[92px_168px_132px_minmax(210px,1fr)_72px_104px_56px_72px_62px_14px]',
+  '[&::-webkit-details-marker]:hidden',
+].join(' ');
+const stat = 'text-left lg:text-right tabular-nums';
+const statLabel = 'block text-xs text-gray-500 whitespace-nowrap';
+const cell = 'px-3 py-1.5 text-right border-b border-gray-100';
+const head = 'px-3 py-2 text-right text-xs font-semibold text-gray-500 bg-gray-50';
+---
+
+{best && (
+  <details class="group mb-2 rounded-lg border border-gray-200 bg-white open:border-gray-300 open:shadow-md">
+    <summary class={summaryClass}>
+      {stale && (
+        <p class="col-span-full -mb-1 rounded bg-amber-50 px-2 py-1 text-xs text-amber-900">
+          Old prices, from {day}. Latest refresh: {note ?? 'no result'}.
+        </p>
+      )}
+      <div>
+        <b class="text-[17px] font-semibold text-gray-900">{symbol}</b>
+        <span class="block text-xs text-gray-500 tabular-nums">{money(best.spot)}</span>
+      </div>
+      <div class="col-span-2 lg:col-span-1">
+        <b class="text-sm font-semibold text-gray-900">{`${expiryLabel(best.expirationDate)} ${strike(best.strike)} call`}</b>
+        <span class="block text-xs text-gray-500">
+          {daysFrom(best)} days
+        </span>
+      </div>
+      <div class="col-span-3 flex items-center gap-2 lg:col-span-1">
+        <span class={`inline-grid h-[34px] min-w-[42px] place-items-center rounded-lg px-2 text-[17px] font-bold tabular-nums ${scoreClass(best.score)}`}>
+          {Math.round(best.score)}
+        </span>
+        <span class={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${chipClass[best.verdict]}`}>{best.verdict}</span>
+      </div>
+      <div class="col-span-3 lg:col-span-1">
+        <CallFairRange ask={best.ask} fairValue={best.fairValue} fairLow={best.fairLow} fairHigh={best.fairHigh} verdict={best.verdict} />
+      </div>
+      <div class={stat}><b class="font-semibold">{signedPercent(best.excessCost)}</b><span class={statLabel}>cost / yr</span></div>
+      <div class={stat}><b class="font-semibold">{signedPercent(breakeven(best))}</b><span class={statLabel}>breakeven / yr</span></div>
+      <div class={stat}><b class="font-semibold">{best.delta.toFixed(2)}</b><span class={statLabel}>delta</span></div>
+      <div class={stat}><b class="font-semibold">{leverage(best).toFixed(1)}x</b><span class={statLabel}>leverage</span></div>
+      <div class={stat}><b class="font-semibold">{percent((best.ask - best.bid) / best.ask)}</b><span class={statLabel}>spread</span></div>
+      <div
+        class="hidden h-2 w-2 -rotate-45 border-b-2 border-r-2 border-gray-400 transition-transform group-open:rotate-45 lg:block"
+        aria-hidden="true"
+      ></div>
+    </summary>
+
+    <div class="border-t border-gray-200 px-4 pb-5 pt-3.5">
+      <p class="flex flex-wrap gap-x-7 gap-y-1 text-[13px] text-gray-500">
+        <span>Forecast volatility <b class="font-semibold text-gray-800">{percent(best.forecastVol, 0)}</b> (3-year)</span>
+        <span>Dividend yield <b class="font-semibold text-gray-800">{percent(best.dividendYield)}</b></span>
+        <span>
+          <b class="font-semibold text-gray-800">{scored}</b> calls scored{!stale && <>, <b class="font-semibold text-gray-800">{dropped}</b> dropped by quote checks</>}
+        </span>
+      </p>
+      {expirations.some(expiration => expiration.calls.some(call => call.verdict === 'Cheap')) && (
+        <p class="mt-2 text-[13px] text-emerald-800">Passed quote checks; confirm the live quote before trading.</p>
+      )}
+
+      {expirations.map(expiration => (
+        <>
+          <h3 class="mb-1.5 mt-4 text-sm font-semibold text-gray-900">
+            {expiryLabel(expiration.expirationDate)}
+            <span class="ml-1.5 font-normal text-gray-500">{daysFrom(expiration.calls[0])} days</span>
+          </h3>
+          <div class="overflow-x-auto rounded-lg border border-gray-200">
+            <table class="w-full border-collapse whitespace-nowrap text-[13px] tabular-nums">
+              <caption class="sr-only">{symbol} calls expiring {expiryLabel(expiration.expirationDate)}</caption>
+              <thead>
+                <tr>
+                  <th scope="col" class={`${head} !text-left`}>Strike</th>
+                  <th scope="col" class={head}>Score</th>
+                  <th scope="col" class={`${head} !text-left`}>Verdict</th>
+                  <th scope="col" class={head}>Bid</th>
+                  <th scope="col" class={head}>Ask</th>
+                  <th scope="col" class={head}>Fair (range)</th>
+                  <th scope="col" class={head}>Cost / yr</th>
+                  <th scope="col" class={head}>Breakeven / yr</th>
+                  <th scope="col" class={head}>Delta</th>
+                  <th scope="col" class={head}>Leverage</th>
+                  <th scope="col" class={head}>Implied vol</th>
+                  <th scope="col" class={head}>Open int.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {expiration.calls.map(call => (
+                  <tr class={call === best ? 'bg-blue-50' : ''}>
+                    <th scope="row" class={`${cell} !text-left font-semibold`}>{strike(call.strike)}</th>
+                    <td class={cell}>
+                      <span class={`inline-grid h-6 min-w-[34px] place-items-center rounded-md px-1.5 text-[13px] font-bold ${scoreClass(call.score)}`}>
+                        {Math.round(call.score)}
+                      </span>
+                    </td>
+                    <td class={`${cell} !text-left`}>
+                      <span class={`rounded-full px-2 py-0.5 text-xs font-semibold ${chipClass[call.verdict]}`}>{call.verdict}</span>
+                    </td>
+                    <td class={cell}>{money(call.bid)}</td>
+                    <td class={cell}>{money(call.ask)}</td>
+                    <td class={cell}>{money(call.fairValue)} <span class="text-gray-400">({call.fairLow.toFixed(2)}–{call.fairHigh.toFixed(2)})</span></td>
+                    <td class={cell}>{signedPercent(call.excessCost)}</td>
+                    <td class={cell}>{signedPercent(breakeven(call))}</td>
+                    <td class={cell}>{call.delta.toFixed(2)}</td>
+                    <td class={cell}>{leverage(call).toFixed(1)}x</td>
+                    <td class={cell}>{percent(call.impliedVol, 0)}</td>
+                    <td class={cell}>{call.openInterest.toLocaleString('en-US')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ))}
+    </div>
+  </details>
+)}

@@ -1,0 +1,48 @@
+---
+import type { CallVerdict } from '../types/call';
+
+interface Props {
+  ask: number;
+  fairValue: number;
+  fairLow: number;
+  fairHigh: number;
+  verdict: CallVerdict;
+}
+
+const { ask, fairValue, fairLow, fairHigh, verdict } = Astro.props;
+
+// The track spans the fair range and the ask, whichever reaches further, with a little air
+const low = Math.min(fairLow, ask);
+const high = Math.max(fairHigh, ask);
+const pad = (high - low) * 0.12 || 1;
+const position = (value: number): number => ((value - (low - pad)) / (high - low + 2 * pad)) * 100;
+const money = (value: number): string => `$${value.toFixed(2)}`;
+
+const dotColor: Record<CallVerdict, string> = {
+  Cheap: 'bg-emerald-600',
+  'In range': 'bg-gray-700',
+  Rich: 'bg-amber-600',
+};
+---
+
+<div>
+  <div
+    class="relative h-2 rounded bg-gray-100"
+    role="img"
+    aria-label={`Ask ${money(ask)}, fair value ${money(fairValue)}, fair range ${money(fairLow)} to ${money(fairHigh)}`}
+  >
+    <span
+      class="absolute inset-y-0 rounded bg-blue-200"
+      style={`left:${position(fairLow).toFixed(1)}%;width:${(position(fairHigh) - position(fairLow)).toFixed(1)}%`}
+    ></span>
+    <span class="absolute -inset-y-[3px] w-0.5 -ml-px bg-blue-700" style={`left:${position(fairValue).toFixed(1)}%`}></span>
+    <span
+      class={`absolute top-1/2 w-3 h-3 -mt-1.5 -ml-1.5 rounded-full border-2 border-white ring-1 ring-black/25 ${dotColor[verdict]}`}
+      style={`left:${position(ask).toFixed(1)}%`}
+    ></span>
+  </div>
+  <div class="mt-1.5 flex flex-wrap justify-between gap-x-3 text-xs text-gray-500 tabular-nums [&>span]:whitespace-nowrap">
+    <span>ask <b class="font-semibold text-gray-800">{money(ask)}</b></span>
+    <span>fair {money(fairValue)} <span class="text-gray-400">({fairLow.toFixed(2)}–{fairHigh.toFixed(2)})</span></span>
+  </div>
+</div>
