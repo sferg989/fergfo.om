@@ -24,3 +24,6 @@ pnpm-debug.log*
 # jetbrains setting folder
 .idea/
 scripts/yahoo-session.sql
+
+# Brainstorm mockups
+.superpowers/
