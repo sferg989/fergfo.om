@@ -7,6 +7,7 @@ import type {
 } from '../types/database';
 import type { OptionData, OptionScore } from '../types/option';
 import type { ExpiredContract, OptionOutcome } from '../types/database';
+import type { CallQuoteRow, CallRefreshLogRow, CallVerdict } from '../types/call';
 
 import { SCORER_VERSION } from '../utils/optionScorer';
 import { dailyStatRowsFor, type OptionDailyStatRow } from '../utils/optionDailyStats';
@@ -205,6 +206,85 @@ export class DatabaseService {
       WHERE rowid IN (SELECT rowid FROM option_daily_stats WHERE day < ? ORDER BY day LIMIT ?)
     `).bind(cutoffDay, limit).run();
     return result.meta.changes ?? 0;
+  }
+
+  /** Store one symbol's scored calls for a day, replacing whatever an earlier refresh that day stored */
+  async saveCallQuotes(symbol: string, day: string, rows: CallQuoteRow[]): Promise<void> {
+    await this.db.prepare(`DELETE FROM call_quotes WHERE symbol = ? AND day = ?`).bind(symbol, day).run();
+    const insert = this.db.prepare(`
+      INSERT OR REPLACE INTO call_quotes (
+        contract_name, day, symbol, strike, expiration_date, spot, bid, ask, volume, open_interest,
+        dividend_yield, forecast_vol, implied_vol, delta, fair_value, fair_low, fair_high,
+        excess_cost, score, verdict, scorer_version
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    await this.runInBatches(rows.map(r => insert.bind(
+      r.contractName, r.day, r.symbol, r.strike, r.expirationDate, r.spot, r.bid, r.ask, r.volume, r.openInterest,
+      r.dividendYield, r.forecastVol, r.impliedVol, r.delta, r.fairValue, r.fairLow, r.fairHigh,
+      r.excessCost, r.score, r.verdict, r.scorerVersion
+    )));
+  }
+
+  /**
+   * Count an attempt at a symbol's call refresh before any work is done, as failed until
+   * finishCallRefresh says otherwise. Written first so that a refresh which dies part-way still
+   * uses up the attempt and the worker moves on to the next symbol.
+   */
+  async startCallRefresh(symbol: string, day: string, fetchedAt: string): Promise<void> {
+    await this.db.prepare(`
+      INSERT INTO call_refresh_log (symbol, day, attempts, status, error, scored, dropped, fetched_at)
+      VALUES (?, ?, 1, 'failed', 'Refresh did not finish', 0, 0, ?)
+      ON CONFLICT(symbol, day) DO UPDATE SET
+        attempts = attempts + 1, status = excluded.status, error = excluded.error,
+        scored = 0, dropped = 0, fetched_at = excluded.fetched_at
+    `).bind(symbol, day, fetchedAt).run();
+  }
+
+  /** Record how the attempt opened by startCallRefresh went */
+  async finishCallRefresh(row: Omit<CallRefreshLogRow, 'attempts' | 'fetchedAt'>): Promise<void> {
+    await this.db.prepare(`
+      UPDATE call_refresh_log SET status = ?, error = ?, scored = ?, dropped = ? WHERE symbol = ? AND day = ?
+    `).bind(row.status, row.error, row.scored, row.dropped, row.symbol, row.day).run();
+  }
+
+  private static readonly CALL_REFRESH_LOG_COLUMNS =
+    'symbol, day, attempts, status, error, scored, dropped, fetched_at AS fetchedAt';
+
+  /** Every symbol's call refresh outcome for one Eastern day */
+  async getCallRefreshLog(day: string): Promise<CallRefreshLogRow[]> {
+    const result = await this.db.prepare(
+      `SELECT ${DatabaseService.CALL_REFRESH_LOG_COLUMNS} FROM call_refresh_log WHERE day = ?`
+    ).bind(day).all<CallRefreshLogRow>();
+    return result.results;
+  }
+
+  /** Each symbol's most recent call refresh outcome */
+  async getLatestCallRefreshes(): Promise<CallRefreshLogRow[]> {
+    const result = await this.db.prepare(`
+      SELECT ${DatabaseService.CALL_REFRESH_LOG_COLUMNS} FROM call_refresh_log
+      WHERE (symbol, day) IN (SELECT symbol, MAX(day) FROM call_refresh_log GROUP BY symbol)
+    `).all<CallRefreshLogRow>();
+    return result.results;
+  }
+
+  /**
+   * Each symbol's scored calls from its latest successful refresh. The day comes from the small
+   * refresh log, so quote history is only touched through its (symbol, day) index.
+   */
+  async getLatestCallQuotes(): Promise<CallQuoteRow[]> {
+    const result = await this.db.prepare(`
+      SELECT
+        q.contract_name AS contractName, q.day, q.symbol, q.strike, q.expiration_date AS expirationDate,
+        q.spot, q.bid, q.ask, q.volume, q.open_interest AS openInterest,
+        q.dividend_yield AS dividendYield, q.forecast_vol AS forecastVol, q.implied_vol AS impliedVol, q.delta,
+        q.fair_value AS fairValue, q.fair_low AS fairLow, q.fair_high AS fairHigh,
+        q.excess_cost AS excessCost, q.score, q.verdict, q.scorer_version AS scorerVersion
+      FROM call_quotes q
+      JOIN (
+        SELECT symbol, MAX(day) AS day FROM call_refresh_log WHERE status = 'ok' AND scored > 0 GROUP BY symbol
+      ) latest ON q.symbol = latest.symbol AND q.day = latest.day
+    `).all<CallQuoteRow & { verdict: CallVerdict }>();
+    return result.results;
   }
 
   /** Serialized Yahoo cookie jar saved by a previous worker run, or null if none yet. */
