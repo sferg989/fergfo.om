@@ -136,13 +136,17 @@ export const isStrikeInDeltaBand = (currentPrice: number, strike: number, dte: n
  */
 export const isBidConsistentWithChain = (
   chain: ReadonlyArray<{ strike: number; bid: number }>,
-  option: { strike: number; bid: number }
+  option: { strike: number; bid: number },
+  side: 'put' | 'call' = 'put'
 ): boolean => {
   const priced = chain.filter(q => q.bid > 0 && q.strike !== option.strike);
   const lower = priced.filter(q => q.strike < option.strike).sort((a, b) => b.strike - a.strike)[0];
   const upper = priced.filter(q => q.strike > option.strike).sort((a, b) => a.strike - b.strike)[0];
-  const withinBounds = (low: { strike: number; bid: number }, high: { strike: number; bid: number }) =>
-    high.bid >= low.bid && high.bid - low.bid <= high.strike - low.strike;
+  // A call is the mirror image: the lower strike is worth at least as much, by at most the strike gap
+  const withinBounds = (low: { strike: number; bid: number }, high: { strike: number; bid: number }) => {
+    const [cheaper, dearer] = side === 'put' ? [low, high] : [high, low];
+    return dearer.bid >= cheaper.bid && dearer.bid - cheaper.bid <= high.strike - low.strike;
+  };
 
   const checks = [
     ...(lower ? [withinBounds(lower, option)] : []),

@@ -107,3 +107,12 @@ describe('isBidConsistentWithChain', () => {
     expect(isBidConsistentWithChain(chain, chain[0])).toBe(true);
   });
 });
+
+describe('isBidConsistentWithChain for calls', () => {
+  it('applies the mirrored bound: a lower strike is worth more, by at most the strike gap', () => {
+    // DELL Jun 2028 on 2026-11-12: the $260 call was quoted far below both neighbours
+    const chain = [{ strike: 230, bid: 194 }, { strike: 240, bid: 188.5 }, { strike: 260, bid: 144.15 }, { strike: 280, bid: 169 }];
+    expect(isBidConsistentWithChain(chain, chain[2], 'call')).toBe(false);
+    expect(isBidConsistentWithChain(chain, chain[1], 'call')).toBe(true);
+  });
+});
