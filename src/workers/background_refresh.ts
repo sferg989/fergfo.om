@@ -1,4 +1,5 @@
 import { BackgroundRefreshService } from '../services/background_refresh_service';
+import { isCallRefreshWindow } from '../utils/marketHoursUtils';
 
 interface Env {
   DB: D1Database;
@@ -33,6 +34,14 @@ export default {
 
       if (!isMarketOpen) {
         console.log('[WORKER] Outside market hours (9:30 AM - 4:00 PM ET, Mon-Fri), skipping refresh');
+        // Shortly after the close, one symbol's long calls are refreshed per tick
+        if (isCallRefreshWindow(now)) {
+          try {
+            await refreshService.refreshNextCallSymbol(now);
+          } catch (callError) {
+            console.error('[CALLS ERROR]', callError instanceof Error ? callError.message : callError);
+          }
+        }
         // Settle expired contracts while the market is closed, a few times an hour
         if (now.getMinutes() % 10 === 0) {
           try {

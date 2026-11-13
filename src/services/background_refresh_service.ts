@@ -1,6 +1,9 @@
 import { OptionsService } from './optionsService';
 import { DatabaseService } from './database_service';
-import { isMarketHours as checkMarketHours } from '../utils/marketHoursUtils';
+import { easternDay, isMarketHours as checkMarketHours } from '../utils/marketHoursUtils';
+import { nextCallSymbol } from '../utils/callRefreshPlan';
+import { PreferredStocks } from '../enums/preferredStocks';
+import type { CallRefreshLogRow, CallRefreshStatus } from '../types/call';
 import { settleShortPut } from '../utils/optionOutcome';
 import { realizedVolatility } from '../utils/realizedVolatility';
 import type { ExpiredContract, OptionOutcome } from '../types/database';
@@ -142,6 +145,48 @@ export class BackgroundRefreshService {
       }
     }
     return closes.get(key);
+  }
+
+  /**
+   * Refresh the long calls of the next preferred symbol still due today. Returns false when
+   * every symbol is done, so the caller can spend the tick on something else.
+   */
+  async refreshNextCallSymbol(now: Date = new Date()): Promise<boolean> {
+    const todaysLog = await DatabaseService.getInstance(this.db).getCallRefreshLog(easternDay(now));
+    const symbol = nextCallSymbol(Object.values(PreferredStocks), todaysLog);
+    if (!symbol) return false;
+    await this.refreshCallsFor(symbol, now);
+    return true;
+  }
+
+  /** Fetch, score and store one symbol's long calls, and log how it went */
+  async refreshCallsFor(symbol: string, now: Date = new Date()): Promise<Omit<CallRefreshLogRow, 'attempts' | 'fetchedAt'>> {
+    const dbService = DatabaseService.getInstance(this.db);
+    const day = easternDay(now);
+    await dbService.startCallRefresh(symbol, day, now.toISOString());
+    const result = await this.optionsService.fetchFreshCallData(symbol, day);
+
+    let status: CallRefreshStatus = 'ok';
+    let error = result.error ?? null;
+    if (error) {
+      status = PROVIDER_ERROR.test(error) ? 'provider_error' : 'failed';
+    } else if (result.rows.length > 0) {
+      try {
+        await dbService.saveCallQuotes(symbol, day, result.rows);
+      } catch (saveError) {
+        status = 'failed';
+        error = `Failed to save call quotes: ${saveError instanceof Error ? saveError.message : saveError}`;
+      }
+    }
+
+    const outcome = { symbol, day, status, error, scored: status === 'ok' ? result.rows.length : 0, dropped: result.dropped };
+    await dbService.finishCallRefresh(outcome);
+    if (status === 'ok') {
+      console.log(`[CALLS] ${symbol}: stored ${outcome.scored} long calls, ${outcome.dropped} dropped by quote checks`);
+    } else {
+      console.error(`[CALLS ERROR] ${symbol} ${status}: ${error}`);
+    }
+    return outcome;
   }
 
   async getNextSymbolToRefresh(): Promise<string | null> {

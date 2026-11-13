@@ -135,3 +135,25 @@ export function isMarketHours(date: Date = new Date()): boolean {
 
   return currentTimeMinutes >= marketOpenMinutes && currentTimeMinutes < marketCloseMinutes;
 }
+
+/** Eastern calendar day as YYYY-MM-DD */
+export function easternDay(date: Date = new Date()): string {
+  return getEasternTimeComponents(date).dateString;
+}
+
+const CALL_REFRESH_START_MINUTES = 16 * 60 + 30;
+const CALL_REFRESH_END_MINUTES = 17 * 60 + 25;
+
+/**
+ * When long calls are refreshed: 4:30 through 5:25 PM ET on a trading day. Yahoo's option
+ * quotes run 15 to 20 minutes behind its stock price, so during the session a call would be
+ * priced against a stock price from a different moment. Half an hour after the close the
+ * delayed quotes have caught up and both are the day's closing values. By the next morning
+ * Yahoo has blanked the bids, so the refresh cannot wait until then.
+ */
+export function isCallRefreshWindow(date: Date = new Date()): boolean {
+  const et = getEasternTimeComponents(date);
+  if (ALL_MARKET_HOLIDAYS.includes(et.dateString) || et.day < 1 || et.day > 5) return false;
+  const minutes = et.hour * 60 + et.minute;
+  return minutes >= CALL_REFRESH_START_MINUTES && minutes <= CALL_REFRESH_END_MINUTES;
+}
