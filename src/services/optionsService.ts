@@ -3,9 +3,13 @@ import { OptionScorer } from '../utils/optionScorer';
 import { isValidSymbol, isStrikeInDeltaBand, isExpirationScorable, isBidConsistentWithChain } from '../utils/optionsUtils';
 import { putThetaPerDay } from '../utils/blackScholes';
 import { realizedVolatility } from '../utils/realizedVolatility';
+import { buildCallRows, dividendYieldFromQuote, forecastVolatility, isLongDated } from '../utils/callChain';
+import type { CallQuote, CallQuoteRow } from '../types/call';
 import YahooFinance from 'yahoo-finance2';
 import { ExtendedCookieJar } from 'yahoo-finance2/lib/cookieJar';
 
+/** Calendar days of price history fetched for the long-call volatility forecast: three trading years plus slack */
+const CALL_FORECAST_HISTORY_DAYS = 1150;
 /** Daily closes used for realized volatility; a trading month, within snapshot retention */
 const REALIZED_VOL_WINDOW_DAYS = 30;
 
@@ -398,6 +402,62 @@ export class OptionsService {
         fetchedAt: undefined,
         error: `Failed to fetch fresh options data: ${errorMessage}` 
       };
+    }
+  }
+
+  /**
+   * Fetch and score a symbol's long-dated calls (for the daily call refresh only). Costs one
+   * options call, one chart call and one options call per long-dated expiration. Any failed
+   * call fails the refresh. Does not write to the database; `day` is stamped on the returned rows.
+   */
+  async fetchFreshCallData(symbol: string, day: string): Promise<{ rows: CallQuoteRow[]; dropped: number; error?: string }> {
+    try {
+      await this.restoreYahooSession();
+
+      const baseData = await yahooFinance.options(symbol, {});
+      const spot = baseData.quote?.regularMarketPrice ?? 0;
+      // Only some of Yahoo's quote variants declare the dividend fields
+      const dividendYield = dividendYieldFromQuote(
+        (baseData.quote ?? {}) as { dividendYield?: number | null; trailingAnnualDividendYield?: number | null }
+      );
+
+      const chart = await yahooFinance.chart(symbol, {
+        period1: new Date(Date.now() - CALL_FORECAST_HISTORY_DAYS * 24 * 60 * 60 * 1000),
+        interval: '1d',
+      });
+      await this.persistYahooSession();
+      const closes = chart.quotes.map(q => q.close).filter((close): close is number => typeof close === 'number' && close > 0);
+      const forecastVol = forecastVolatility(closes);
+      if (spot <= 0) return { rows: [], dropped: 0, error: `Yahoo returned no price for ${symbol}` };
+      if (forecastVol === undefined) {
+        return { rows: [], dropped: 0, error: `Not enough price history to forecast volatility for ${symbol}` };
+      }
+
+      // Unlike the put fetch, one failed expiration fails the whole refresh: calls get one run a
+      // day, and a partial chain would crown a "best call" from whatever happened to load.
+      const expirations: { expirationDate: Date; quotes: CallQuote[] }[] = [];
+      for (const expirationDate of baseData.expirationDates.map(d => new Date(d)).filter(d => isLongDated(d))) {
+        const dateData = await yahooFinance.options(symbol, { date: expirationDate });
+        const calls: YahooOptionData[] = dateData.options[0]?.calls ?? [];
+        expirations.push({
+          expirationDate,
+          quotes: calls.map(call => ({
+            contractName: call.contractSymbol,
+            strike: call.strike,
+            expirationDate: expirationDate.toISOString(),
+            bid: call.bid ?? 0,
+            ask: call.ask ?? 0,
+            volume: call.volume ?? 0,
+            openInterest: call.openInterest ?? 0,
+          })),
+        });
+      }
+
+      return buildCallRows({ symbol, day, spot, dividendYield, forecastVol, expirations });
+    } catch (error) {
+      console.error(`Error fetching call data for ${symbol}:`, error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return { rows: [], dropped: 0, error: `Failed to fetch call data: ${errorMessage}` };
     }
   }
 
